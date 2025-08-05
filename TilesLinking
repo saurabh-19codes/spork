@@ -1,0 +1,19 @@
+it('should render AvailabilityTiles when org is onboarded', () => {
+  // Arrange: create activeOrg with a code present in OrgsOnboarded
+  const activeOrg = { code: 'GMST', label: 'Some Org' };
+  const OrgsOnboarded = ['GMST', 'Digital Banking'];
+
+  // Render your component with these props/mocks (adjust as per your setup)
+  render(
+    <TilesLink
+      activeOrg={activeOrg} // or mock the hook to return this
+    />
+  );
+
+  // Assert: AvailabilityTiles is in the document
+  expect(screen.getByTestId('tiles')).toBeInTheDocument();
+  // Or: if AvailabilityTiles has a unique text or testid, check for it specifically.
+});
+jest.mock('../hooks/useAuthData', () => ({
+  useActiveOrg: () => ({ code: 'GMST', label: 'Some Org' })
+}));
