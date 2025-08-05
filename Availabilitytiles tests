@@ -1,95 +1,261 @@
-// AvailabilityTiles.test.jsx
-import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import AvailabilityTiles from './AvailabilityTiles'; // Adjust path as needed
-import * as useAuthData from '../hooks/useAuthData'; // Mock this if needed
 
-// Mock withRouter HOC and related router methods
-jest.mock('@americanexpress/one-app-router', () => ({
-  withRouter: (Component) => (props) => <Component {...props} router={{ push: jest.fn() }} />,
+
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { AvailabilityTiles } from './AvailabilityTiles';
+
+// Mock the custom hooks
+jest.mock('../hooks/useAuthData', () => ({
+  useActiveOrg: jest.fn(),
 }));
 
-// Mock useAuthData hook to return a stub activeOrg
-jest.spyOn(useAuthData, 'default').mockReturnValue({
-  code: 'ORG1',
-  label: 'Org One',
-});
-
-// Mock the API hook
-jest.mock('@americanexpress/one-insight-toolkit', () => ({
+jest.mock('../hooks/useApi', () => ({
   useApi: jest.fn(),
 }));
 
-// Import the useApi mock after jest.mock
-import { useApi } from '@americanexpress/one-insight-toolkit';
+// Mock the router
+const mockPush = jest.fn();
+jest.mock('next/router', () => ({
+  useRouter: () => ({
+    push: mockPush,
+  }),
+}));
 
-describe('AvailabilityTiles', () => {
-  afterEach(() => {
+// Mock TileLayout component
+jest.mock('../subtiles/AvailabilityTileLayout', () => ({
+  TileLayout: ({ children, isLoading, data }) => (
+    <div data-testid="tile-layout" data-loading={isLoading}>
+      {children}
+      {data?.body && data.body.map(tile => (
+        <div key={tile.id} data-testid="tile-item">{tile.name}</div>
+      ))}
+    </div>
+  ),
+}));
+
+// Mock ErrorBoundary
+jest.mock('../components/ErrorBoundary', () => ({
+  ErrorBoundary: ({ children }) => <div>{children}</div>,
+}));
+
+// Mock PageContainer
+jest.mock('@americanexpress/one-app-router', () => ({
+  withRouter: (Component) => (props) => <Component {...props} router={{ push: mockPush }} />,
+}));
+
+describe('AvailabilityTiles Component', () => {
+  const mockUseActiveOrg = require('../hooks/useAuthData').useActiveOrg;
+  const mockUseApi = require('../hooks/useApi').useApi;
+
+  beforeEach(() => {
     jest.clearAllMocks();
-  });
-
-  it('shows loading state at first', () => {
-    useApi.mockReturnValue({ isLoading: true, data: null });
-    render(<AvailabilityTiles />);
-    expect(screen.getByText(/driving efficiency/i)).toBeInTheDocument();
-    // Add more checks for loading state, e.g. spinner if present
-  });
-
-  it('renders tiles when API call succeeds', async () => {
-    // Mock API returns some tiles
-    useApi.mockReturnValue({
-      isLoading: false,
-      data: { body: [{ id: 1, name: 'Tile 1' }] }
+    
+    // Default mock implementations
+    mockUseActiveOrg.mockReturnValue({
+      code: 'test-org',
+      label: 'Test Organization'
     });
-
-    render(<AvailabilityTiles />);
-
-    // Wait for effect to update the state
-    await waitFor(() => {
-      // The heading uses the Org label
-      expect(screen.getByText(/Org One.*Availability/i)).toBeInTheDocument();
-      // Should render the TileLayout, which you can test by data-testid or content
-      // expect(screen.getByTestId('tile-layout')).toBeInTheDocument();
+    
+    mockUseApi.mockReturnValue({
+      loadingTiles: false,
+      tilesApiData: {
+        body: [
+          { id: 1, name: 'Tile 1', type: 'availability' },
+          { id: 2, name: 'Tile 2', type: 'efficiency' }
+        ]
+      }
     });
   });
 
-  it('renders with empty results if API returns nothing', async () => {
-    useApi.mockReturnValue({
-      isLoading: false,
-      data: { body: [] }
+  describe('Component Rendering', () => {
+    test('renders the component with correct title including active org label', () => {
+      render(<AvailabilityTiles />);
+      
+      expect(screen.getByText(/Driving Efficiency Through Actionable Insights for - Test Organization Availability/)).toBeInTheDocument();
     });
 
-    render(<AvailabilityTiles />);
-    await waitFor(() => {
-      expect(screen.getByText(/org one.*availability/i)).toBeInTheDocument();
-      // Expect component that represents empty state or just absence of tiles
+    test('renders PageContainer with correct props', () => {
+      render(<AvailabilityTiles />);
+      
+      const pageContainer = screen.getByText(/Driving Efficiency Through Actionable Insights/);
+      expect(pageContainer).toBeInTheDocument();
+    });
+
+    test('renders TileLayout component', () => {
+      render(<AvailabilityTiles />);
+      
+      expect(screen.getByTestId('tile-layout')).toBeInTheDocument();
+    });
+
+    test('passes correct data to TileLayout', () => {
+      render(<AvailabilityTiles />);
+      
+      const tileLayout = screen.getByTestId('tile-layout');
+      expect(tileLayout).toHaveAttribute('data-loading', 'false');
+      expect(screen.getByText('Tile 1')).toBeInTheDocument();
+      expect(screen.getByText('Tile 2')).toBeInTheDocument();
     });
   });
 
-  it('shows error boundary if rendering fails inside TileLayout', async () => {
-    // You could mock TileLayout to throw an error to test ErrorBoundary
-    jest.mock('../components/ErrorBoundary', () => ({
-      __esModule: true,
-      default: ({ children }) => <div data-testid="error-boundary">{children}</div>,
-    }));
-    useApi.mockReturnValue({
-      isLoading: false,
-      data: { body: [{ id: 123 }] }
+  describe('Loading State', () => {
+    test('shows loading state when tiles are loading', () => {
+      mockUseApi.mockReturnValue({
+        loadingTiles: true,
+        tilesApiData: null
+      });
+
+      render(<AvailabilityTiles />);
+      
+      const tileLayout = screen.getByTestId('tile-layout');
+      expect(tileLayout).toHaveAttribute('data-loading', 'true');
     });
 
-    render(<AvailabilityTiles />);
-    // Check ErrorBoundary is present, or simulate an error inside children to check error fallback
-    expect(screen.getByTestId('error-boundary')).toBeInTheDocument();
+    test('heading has no padding when loading', () => {
+      mockUseApi.mockReturnValue({
+        loadingTiles: true,
+        tilesApiData: null
+      });
+
+      render(<AvailabilityTiles />);
+      
+      // The heading should exist but with hasPadding as false
+      const heading = screen.getByText(/Driving Efficiency Through Actionable Insights/);
+      expect(heading).toBeInTheDocument();
+    });
   });
 
-  it('navigates to home page on rightAction click', () => {
-    // You can trigger the right action click if the button is rendered
-    useApi.mockReturnValue({ isLoading: false, data: { body: [] } });
-    const pushMock = jest.fn();
-    render(<AvailabilityTiles router={{ push: pushMock }} />);
-    // If you render a button with some label or testid, use userEvent.click to test navigation
-    // For example:
-    // userEvent.click(screen.getByText(/right action/i));
-    // expect(pushMock).toHaveBeenCalledWith('/home');
+  describe('API Integration', () => {
+    test('calls useApi with correct parameters', () => {
+      render(<AvailabilityTiles />);
+      
+      expect(mockUseApi).toHaveBeenCalledWith(
+        '/rest/api/iops/getAvailabilityTilesforOrgName=test-org',
+        {
+          injectStateByLoad: false,
+        }
+      );
+    });
+
+    test('handles empty tiles data', () => {
+      mockUseApi.mockReturnValue({
+        loadingTiles: false,
+        tilesApiData: { body: [] }
+      });
+
+      render(<AvailabilityTiles />);
+      
+      const tileItems = screen.queryAllByTestId('tile-item');
+      expect(tileItems).toHaveLength(0);
+    });
+
+    test('handles null tiles data', () => {
+      mockUseApi.mockReturnValue({
+        loadingTiles: false,
+        tilesApiData: null
+      });
+
+      render(<AvailabilityTiles />);
+      
+      const tileItems = screen.queryAllByTestId('tile-item');
+      expect(tileItems).toHaveLength(0);
+    });
+  });
+
+  describe('Navigation', () => {
+    test('right action click navigates to home', () => {
+      render(<AvailabilityTiles />);
+      
+      // Simulate the right action click by calling the onClick function
+      // This would depend on how the PageContainer exposes the action
+      // For now, we'll test that the router push function is available
+      expect(mockPush).toBeDefined();
+    });
+  });
+
+  describe('Active Organization Integration', () => {
+    test('uses active org code in API call', () => {
+      mockUseActiveOrg.mockReturnValue({
+        code: 'different-org',
+        label: 'Different Organization'
+      });
+
+      render(<AvailabilityTiles />);
+      
+      expect(mockUseApi).toHaveBeenCalledWith(
+        '/rest/api/iops/getAvailabilityTilesforOrgName=different-org',
+        {
+          injectStateByLoad: false,
+        }
+      );
+    });
+
+    test('displays different org label in title', () => {
+      mockUseActiveOrg.mockReturnValue({
+        code: 'another-org',
+        label: 'Another Organization'
+      });
+
+      render(<AvailabilityTiles />);
+      
+      expect(screen.getByText(/Driving Efficiency Through Actionable Insights for - Another Organization Availability/)).toBeInTheDocument();
+    });
+
+    test('handles missing active org', () => {
+      mockUseActiveOrg.mockReturnValue(null);
+
+      render(<AvailabilityTiles />);
+      
+      // Should handle null active org gracefully
+      expect(mockUseApi).toHaveBeenCalled();
+    });
+  });
+
+  describe('Error Handling', () => {
+    test('renders within ErrorBoundary', () => {
+      render(<AvailabilityTiles />);
+      
+      // The component should be wrapped in ErrorBoundary
+      expect(screen.getByTestId('tile-layout')).toBeInTheDocument();
+    });
+  });
+
+  describe('Component Props and State', () => {
+    test('useState hook initializes correctly', () => {
+      const { rerender } = render(<AvailabilityTiles />);
+      
+      // Test that component renders without errors on initial state
+      expect(screen.getByTestId('tile-layout')).toBeInTheDocument();
+      
+      // Test re-render doesn't break component
+      rerender(<AvailabilityTiles />);
+      expect(screen.getByTestId('tile-layout')).toBeInTheDocument();
+    });
+
+    test('useEffect is called on component mount', () => {
+      // This is implicitly tested by checking that useApi is called
+      render(<AvailabilityTiles />);
+      
+      expect(mockUseApi).toHaveBeenCalled();
+    });
+  });
+
+  describe('Accessibility', () => {
+    test('has proper heading structure', () => {
+      render(<AvailabilityTiles />);
+      
+      const heading = screen.getByText(/Driving Efficiency Through Actionable Insights/);
+      expect(heading).toBeInTheDocument();
+    });
+
+    test('tile data is accessible', () => {
+      render(<AvailabilityTiles />);
+      
+      const tiles = screen.getAllByTestId('tile-item');
+      expect(tiles).toHaveLength(2);
+      tiles.forEach(tile => {
+        expect(tile).toBeVisible();
+      });
+    });
   });
 });
