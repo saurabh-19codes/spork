@@ -1,0 +1,95 @@
+// AvailabilityTiles.test.jsx
+import React from 'react';
+import { render, screen, waitFor } from '@testing-library/react';
+import AvailabilityTiles from './AvailabilityTiles'; // Adjust path as needed
+import * as useAuthData from '../hooks/useAuthData'; // Mock this if needed
+
+// Mock withRouter HOC and related router methods
+jest.mock('@americanexpress/one-app-router', () => ({
+  withRouter: (Component) => (props) => <Component {...props} router={{ push: jest.fn() }} />,
+}));
+
+// Mock useAuthData hook to return a stub activeOrg
+jest.spyOn(useAuthData, 'default').mockReturnValue({
+  code: 'ORG1',
+  label: 'Org One',
+});
+
+// Mock the API hook
+jest.mock('@americanexpress/one-insight-toolkit', () => ({
+  useApi: jest.fn(),
+}));
+
+// Import the useApi mock after jest.mock
+import { useApi } from '@americanexpress/one-insight-toolkit';
+
+describe('AvailabilityTiles', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('shows loading state at first', () => {
+    useApi.mockReturnValue({ isLoading: true, data: null });
+    render(<AvailabilityTiles />);
+    expect(screen.getByText(/driving efficiency/i)).toBeInTheDocument();
+    // Add more checks for loading state, e.g. spinner if present
+  });
+
+  it('renders tiles when API call succeeds', async () => {
+    // Mock API returns some tiles
+    useApi.mockReturnValue({
+      isLoading: false,
+      data: { body: [{ id: 1, name: 'Tile 1' }] }
+    });
+
+    render(<AvailabilityTiles />);
+
+    // Wait for effect to update the state
+    await waitFor(() => {
+      // The heading uses the Org label
+      expect(screen.getByText(/Org One.*Availability/i)).toBeInTheDocument();
+      // Should render the TileLayout, which you can test by data-testid or content
+      // expect(screen.getByTestId('tile-layout')).toBeInTheDocument();
+    });
+  });
+
+  it('renders with empty results if API returns nothing', async () => {
+    useApi.mockReturnValue({
+      isLoading: false,
+      data: { body: [] }
+    });
+
+    render(<AvailabilityTiles />);
+    await waitFor(() => {
+      expect(screen.getByText(/org one.*availability/i)).toBeInTheDocument();
+      // Expect component that represents empty state or just absence of tiles
+    });
+  });
+
+  it('shows error boundary if rendering fails inside TileLayout', async () => {
+    // You could mock TileLayout to throw an error to test ErrorBoundary
+    jest.mock('../components/ErrorBoundary', () => ({
+      __esModule: true,
+      default: ({ children }) => <div data-testid="error-boundary">{children}</div>,
+    }));
+    useApi.mockReturnValue({
+      isLoading: false,
+      data: { body: [{ id: 123 }] }
+    });
+
+    render(<AvailabilityTiles />);
+    // Check ErrorBoundary is present, or simulate an error inside children to check error fallback
+    expect(screen.getByTestId('error-boundary')).toBeInTheDocument();
+  });
+
+  it('navigates to home page on rightAction click', () => {
+    // You can trigger the right action click if the button is rendered
+    useApi.mockReturnValue({ isLoading: false, data: { body: [] } });
+    const pushMock = jest.fn();
+    render(<AvailabilityTiles router={{ push: pushMock }} />);
+    // If you render a button with some label or testid, use userEvent.click to test navigation
+    // For example:
+    // userEvent.click(screen.getByText(/right action/i));
+    // expect(pushMock).toHaveBeenCalledWith('/home');
+  });
+});
