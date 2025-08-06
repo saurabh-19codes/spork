@@ -1,0 +1,94 @@
+import { rawToHeaders, headerGroups } from './headerHelpers';
+
+// Mock input data for rawToHeaders
+const mockData = {
+  repo: 'test-repo',
+  ghaEligibleRepo: 'gha',
+  ghaEnabledRepo: 'ghae',
+  reposQualifiedForCoverage: 'qualified',
+  gatingEnabled: { codeGating: 'yes', functionalGating: 'no', functionalBddEnabled: 'maybe' },
+
+  aimId: '1A',
+  appName: 'TestApp',
+  commitsYTD: 100,
+  prsYTD: 25,
+  ltcAppName: 'LTCApp',
+  ltcAimId: 'LTC-1A',
+  leadTimeProdYTD: 7,
+  leadTimeArenaYTD: 10,
+  repoNameLeadTime: 'RepoLT',
+  avgBuildTime: 12.4,
+
+  cfrAimId: 'CFR_1AID',
+  cfrAppName: 'CFRApp',
+  assignmentGroupCfr: 'SupportTeam',
+  state: 'Complete',
+  openedAtCfr: '2023-01-01T01:01:01Z',
+  lastUpdatedDate: '2023-02-01T01:01:01Z',
+  closedAt: '2023-03-01T01:01:01Z',
+  closeCodeCfr: 'RESOLVED',
+  closeNotesCfr: 'Fix applied',
+  // Add remaining fields as needed for tests
+};
+
+describe('rawToHeaders', () => {
+  it('should return correct headers for leadTimeToChange', () => {
+    const result = rawToHeaders({ ...mockData, category: 'leadTimeToChange' });
+    expect(result).toHaveProperty('AIM Id', mockData.ltcAimId);
+    expect(result).toHaveProperty('App Name', mockData.ltcAppName);
+    expect(result).toHaveProperty('#of Commits with Freq', mockData.commitsYTD);
+    // ...add more expectations as per mapping
+  });
+
+  it('should return correct headers for meanTimeToResolve', () => {
+    const result = rawToHeaders({ ...mockData, category: 'meanTimeToResolve' });
+    expect(result).toHaveProperty('AIM Id', mockData.mttrAimId);
+    expect(result).toHaveProperty('App Name', mockData.mttrAppName);
+    // ...additional expectations
+  });
+
+  it('should return correct headers for changeFailureRate', () => {
+    const result = rawToHeaders({ ...mockData, category: 'changeFailureRate' });
+    expect(result).toHaveProperty('AIM Id', mockData.cfrAimId);
+    // ...additional expectations
+  });
+
+  it('should return correct headers for deploymentFrequency', () => {
+    const result = rawToHeaders({ ...mockData, category: 'deploymentFrequency' });
+    expect(result).toHaveProperty('AIM ID', mockData.freqofDeployAimId);
+    // ...additional expectations
+  });
+
+  it('should return correct headers for piData', () => {
+    const piMock = { ...mockData, category: 'piData', director: 'Director', pi_1: 'a', pi_2: 'b', pi_3: 'c', pi_4: 'd', pi_1_header: 'H1', pi_2_header: 'H2', pi_3_header: 'H3', pi_4_header: 'H4' };
+    const result = rawToHeaders(piMock);
+    expect(result).toHaveProperty('Director', 'Director');
+    expect(result).toHaveProperty('pi_1_header', 'H1');
+    // ...additional checks
+  });
+
+  it('should return default headers if category is unknown', () => {
+    const result = rawToHeaders({ ...mockData, category: 'unknownCategory' });
+    expect(result).toHaveProperty('AIM ID', mockData.aimId);
+    expect(result).toHaveProperty('App Name', mockData.appName);
+    // ...additional checks
+  });
+});
+
+describe('headerGroups', () => {
+  it('should return correct group for leadTimeToChange', () => {
+    const result = headerGroups('leadTimeToChange');
+    expect(result).toEqual([{ name: '', origin: 'A1' }]);
+  });
+
+  it('should return the correct groups for default', () => {
+    const result = headerGroups('unknownCategory');
+    expect(result).toEqual([
+      { name: '', origin: 'A1' },
+      { name: 'Repos Qualified For Coverage', origin: 'E1' },
+      { name: 'Gating Enabled In Framework', origin: 'J1' }
+    ]);
+  });
+
+  // Add additional category group tests as needed...
+});
