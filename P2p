@@ -1,0 +1,188 @@
+import React from "react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import '@testing-library/jest-dom';
+import PTPHomePage from "./PTPHomePage";
+
+jest.mock("@americanexpress/one-app-router", () => ({
+  withRouter: (cmp) => cmp,
+}));
+
+jest.mock("../../hooks/useAuthData", () => ({
+  useActiveOrg: () => ({ code: "org-code" }),
+  useApi: jest.fn(),
+}));
+
+// Mock dependent components
+jest.mock("../../components/HealthMetricCard", () => (props) => (
+  <div data-testid="health-metric-card" onClick={props.onSubTileClick}>
+    {props.title}
+  </div>
+));
+jest.mock("../../components/ErrorBoundary", () => ({ children }) => <>{children}</>);
+jest.mock("../../components/UnderConstruction", () => () => <div>UnderConstruction</div>);
+jest.mock("../../components/MedalIcon", () => () => <i>MedalIcon</i>);
+
+const mockRouter = { push: jest.fn() };
+
+// Mock API data
+const mockVpData = {
+  body: {
+    body: [
+      "VP1",
+      "VP2"
+    ]
+  }
+};
+
+const mockPiData = {
+  body: {
+    body: [
+      "PI1",
+      "PI2"
+    ]
+  }
+};
+
+const mockHomePageRawData = {
+  body: {
+    overallHealthData7: {    
+      title: "Health Title",
+      tooltip: "Tooltip text",
+      score: 83,
+      grade: "A",
+    },
+    metricData: {
+      codeCoWhealth: {
+        title: "Code Health",
+        score: 90,
+        icon: "icon-1",
+        toolTipInfo: "Info",
+        isCriteriaSatisfied: true,
+        def: "Definition",
+        link: "/link",
+      },
+      deployFreq: {
+        title: "Deployment Frequency",
+        score: 70,
+        icon: "icon-2",
+        toolTipInfo: "Info",
+        isCriteriaSatisfied: false,
+        def: "Definition",
+        link: "/link"
+      }
+    }
+  }
+};
+
+const mockUseApi = require("../../hooks/useAuthData").useApi;
+
+// ------------------------------------------
+//            TEST SUITE
+// ------------------------------------------
+describe("PTPHomePage Component", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Mock useApi for VPs, PIs, homepage metrics
+    mockUseApi.mockImplementation((endpoint) => {
+      if (endpoint === "/rest/api/one-insight/vpData") {
+        return { isLoading: false, data: mockVpData };
+      }
+      if (endpoint === "/rest/api/one-insight/piData") {
+        return { isLoading: false, data: mockPiData };
+      }
+      if (
+        endpoint === "/rest/api/one-insight/doraMetrics" ||
+        endpoint === "/rest/api/one-insight/doraMetricsGha"
+      ) {
+        return { isLoading: false, data: mockHomePageRawData };
+      }
+      return { isLoading: false, data: {} };
+    });
+  });
+
+  test("renders without crashing and shows page title", async () => {
+    render(<PTPHomePage router={mockRouter} />);
+    expect(
+      await screen.findByText(/DORA/i)
+    ).toBeInTheDocument();
+  });
+
+  test("renders VP and PI selectors with correct options", async () => {
+    render(<PTPHomePage router={mockRouter} />);
+    expect(await screen.findByLabelText(/Select a VP/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Select a VP/i), {
+      target: { value: "VP1" }
+    });
+    expect(screen.getByLabelText(/Select a PI/i)).toBeInTheDocument();
+  });
+
+  test("shows metric cards based on homepage data", async () => {
+    render(<PTPHomePage router={mockRouter} />);
+    expect(await screen.findByText(/Code Health/i)).toBeInTheDocument();
+    expect(screen.getByText(/Deployment Frequency/i)).toBeInTheDocument();
+  });
+
+  test("card click navigates correctly: code health metric", async () => {
+    render(<PTPHomePage router={mockRouter} />);
+    // Find the Code Health card and click
+    fireEvent.click(await screen.findByText(/Code Health/i));
+    expect(mockRouter.push).toHaveBeenCalledWith(
+      "/org-code/dora-metrics/coverage-report"
+    );
+  });
+
+  test("card click navigates correctly: non code-health metric", async () => {
+    render(<PTPHomePage router={mockRouter} />);
+    fireEvent.click(await screen.findByText(/Deployment Frequency/i));
+    expect(mockRouter.push).toHaveBeenCalledWith(
+      expect.stringMatching(/\/org-code\/metric-level/i)
+    );
+  });
+
+  test("toggles GHA and fetches correct data endpoint", async () => {
+    render(<PTPHomePage router={mockRouter} />);
+    const ghaToggle = screen.getByRole("checkbox");
+    fireEvent.click(ghaToggle);
+    // assuming useApi is called with GHA route now
+    expect(mockUseApi).toHaveBeenCalledWith(
+      "/rest/api/one-insight/doraMetricsGha",
+      expect.any(Object)
+    );
+  });
+
+  test("renders tooltip and info", async () => {
+    render(<PTPHomePage router={mockRouter} />);
+    expect(
+      await screen.findByText(/Tooltip text/i)
+    ).toBeInTheDocument();
+  });
+
+  test("shows UnderConstruction component when no homepage data", async () => {
+    mockUseApi.mockImplementation((endpoint) => {
+      if (endpoint.includes("doraMetrics")) {
+        return { isLoading: false, data: { body: {} } };
+      }
+      return { isLoading: false, data: mockVpData };
+    });
+    render(<PTPHomePage router={mockRouter} />);
+    expect(await screen.findByText(/UnderConstruction/i)).toBeInTheDocument();
+  });
+
+  test("back button navigates to home", async () => {
+    render(<PTPHomePage router={mockRouter} />);
+    const backBtn = screen.getByLabelText(/Back/i);
+    fireEvent.click(backBtn);
+    expect(mockRouter.push).toHaveBeenCalledWith("/org-code/home");
+  });
+
+  test("fallback values display 'N/A' when data is missing", async () => {
+    mockUseApi.mockImplementation((endpoint) => {
+      if (endpoint.includes("doraMetrics")) {
+        return { isLoading: false, data: { body: { overallHealthData7: {} } } };
+      }
+      return { isLoading: false, data: mockVpData };
+    });
+    render(<PTPHomePage router={mockRouter} />);
+    expect(await screen.findByText("N/A")).toBeInTheDocument();
+  });
+});
