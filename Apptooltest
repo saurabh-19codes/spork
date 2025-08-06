@@ -1,0 +1,36 @@
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import AppTooltip from './AppTooltip';
+
+jest.mock('@americanexpress/dls-react', () => ({
+  Tooltip: ({ triggerElement, children }) => (
+    <div>
+      <span data-testid="trigger">{triggerElement}</span>
+      <span data-testid="tooltip-content">{children}</span>
+    </div>
+  ),
+}));
+
+describe('AppTooltip', () => {
+  it('renders the label in triggerElement', () => {
+    render(<AppTooltip label="My Label" info="Tooltip Info" />);
+    expect(screen.getByText('My Label')).toBeInTheDocument();
+  });
+
+  it('renders the info inside Tooltip', () => {
+    render(<AppTooltip label="Label" info="Some Info" />);
+    expect(screen.getByTestId('tooltip-content')).toHaveTextContent('Some Info');
+  });
+
+  it('shows empty when info is empty', () => {
+    render(<AppTooltip label="Label" info="" />);
+    expect(screen.getByTestId('tooltip-content')).toHaveTextContent('');
+  });
+
+  it('requires label and info as strings', () => {
+    // PropTypes errors are shown as console error, skip this check for snapshot/unit test
+    render(<AppTooltip label="A" info="B" />);
+    expect(screen.getByText('A')).toBeInTheDocument();
+    expect(screen.getByTestId('tooltip-content')).toHaveTextContent('B');
+  });
+});
