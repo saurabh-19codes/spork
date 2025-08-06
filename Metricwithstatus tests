@@ -1,0 +1,43 @@
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import MetricWithStatus from './MetricWithStatus';
+
+jest.mock('../../components/AppStatus', () => ({ isFalsy }) => (
+  <div data-testid="app-status">{String(isFalsy)}</div>
+));
+
+describe('MetricWithStatus', () => {
+  const defaultProps = {
+    percentage: '75%',
+    metricKey: 'uptime',
+    isFalsy: false,
+  };
+
+  it('renders percentage and metricKey', () => {
+    render(<MetricWithStatus {...defaultProps} />);
+    expect(screen.getByText('75%')).toBeInTheDocument();
+    expect(screen.getByText('uptime')).toBeInTheDocument();
+  });
+
+  it('renders AppStatus when isFalsy is defined', () => {
+    render(<MetricWithStatus {...defaultProps} />);
+    expect(screen.getByTestId('app-status')).toHaveTextContent('false');
+  });
+
+  it('does not render AppStatus when isFalsy is undefined', () => {
+    render(<MetricWithStatus percentage="50%" metricKey="latency" />);
+    expect(screen.queryByTestId('app-status')).not.toBeInTheDocument();
+  });
+
+  it('applies flex style to main div', () => {
+    render(<MetricWithStatus {...defaultProps} />);
+    const mainDiv = screen.getByText('75%').closest('div').parentNode;
+    expect(mainDiv).toHaveStyle({ display: 'flex', justifyContent: 'space-between', width: '100%' });
+  });
+
+  it('applies column flex to metric section', () => {
+    render(<MetricWithStatus {...defaultProps} />);
+    const metricCol = screen.getByText('uptime').closest('div');
+    expect(metricCol).toHaveStyle({ flexDirection: 'column', textAlign: 'center' });
+  });
+});
