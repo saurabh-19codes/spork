@@ -1,0 +1,45 @@
+import { transformPiDrillDatawithStaticKeys } from './overallMetricTableHelper';
+
+describe('transformPiDrillDatawithStaticKeys', () => {
+  it('should transform data as expected', () => {
+    const input = [
+      {
+        director: 'John',
+        piData: { pi1: 10, pi2: 20 }
+      },
+      {
+        director: 'Jane',
+        piData: { pi2: 30, pi3: 40 }
+      }
+    ];
+    const output = transformPiDrillDatawithStaticKeys(input);
+
+    expect(output).toEqual([
+      {
+        director: 'John',
+        pi_1: 10, pi_1_header: 'pi1',
+        pi_2: 20, pi_2_header: 'pi2',
+        pi_3: 'NA', pi_3_header: 'pi3',
+      },
+      {
+        director: 'Jane',
+        pi_1: 'NA', pi_1_header: 'pi1',
+        pi_2: 30, pi_2_header: 'pi2',
+        pi_3: 40, pi_3_header: 'pi3',
+      }
+    ]);
+  });
+
+  it('should handle empty input', () => {
+    expect(transformPiDrillDatawithStaticKeys([])).toEqual([]);
+  });
+
+  it('should handle missing piData', () => {
+    const input = [
+      { director: 'Alex' }
+    ];
+    expect(transformPiDrillDatawithStaticKeys(input)).toEqual([
+      { director: 'Alex' }
+    ]);
+  });
+});
