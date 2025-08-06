@@ -1,0 +1,97 @@
+jest.mock('xlsx', () => ({
+  utils: {
+    book_new: jest.fn(),
+    json_to_sheet: jest.fn(),
+    sheet_add_aoa: jest.fn(),
+    book_append_sheet: jest.fn(),
+    decode_range: jest.fn((r) => r),
+    write: jest.fn(),
+  }
+}));
+import { generateExportReport, exportToCSV } from './exportHelper';
+import XLSX from 'xlsx';
+
+describe('generateExportReport', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Initial mock returns
+    XLSX.utils.book_new.mockReturnValue({});
+    XLSX.utils.json_to_sheet.mockReturnValue({});
+    XLSX.utils.write.mockReturnValue(new ArrayBuffer(2));
+  });
+
+  it('writes and merges cells based on category', () => {
+    const data = [ { foo: 'bar' } ];
+    const categories = [
+      { cat: 'leadTimeToChange', range: 'A1:H1' },
+      { cat: 'meanTimeToResolve', range: 'A1:L1' },
+      { cat: 'changeFailureRate', range: 'A1:L1' },
+      { cat: 'deploymentFrequency', range: 'A1:I1' },
+      { cat: 'piData', range: 'A1:E1' },
+    ];
+
+    for (const { cat, range } of categories) {
+      generateExportReport(data, cat);
+      expect(XLSX.utils.decode_range).toHaveBeenCalledWith(range);
+    }
+  });
+
+  it('uses default merges for unknown category', () => {
+    generateExportReport([], 'unknownCat');
+    expect(XLSX.utils.decode_range).toHaveBeenCalledWith('A1:D1');
+    expect(XLSX.utils.decode_range).toHaveBeenCalledWith('E1:I1');
+    expect(XLSX.utils.decode_range).toHaveBeenCalledWith('J1:K1');
+  });
+
+  it('returns an Excel buffer', () => {
+    const result = generateExportReport([{ foo: 1 }], 'leadTimeToChange');
+    // Should match the mocked XLSX.write return value
+    expect(result).toBeInstanceOf(ArrayBuffer);
+  });
+});
+
+describe('exportToCSV', () => {
+  beforeEach(() => {
+    global.Blob = function(content, opts) { this.content = content; this.opts = opts; };
+    global.saveAs = jest.fn();
+    jest.clearAllMocks();
+  });
+
+  it('calls generateExportReport and saveAs with correct params', () => {
+    const inputData = [{ x: 1 }];
+    const fileName = 'TestFile';
+    const category = 'leadTimeToChange';
+
+    // Mock generateExportReport to return dummy data
+    const buffer = new ArrayBuffer(3);
+    const realGen = generateExportReport;
+    generateExportReport = jest.fn(() => buffer);
+
+    exportToCSV(inputData, fileName, category);
+
+    expect(generateExportReport).toHaveBeenCalledWith(inputData, category);
+    expect(global.saveAs).toHaveBeenCalled();
+
+    // Restore so other tests are unaffected
+    generateExportReport = realGen;
+  });
+
+  it('generates file with .xlsx extension', () => {
+    const inputData = [{ y: 4 }];
+    const fileName = 'Output';
+    const category = 'piData';
+    // Mock output buffer
+    const buffer = new ArrayBuffer(2);
+
+    const realGen = generateExportReport;
+    generateExportReport = jest.fn(() => buffer);
+
+    exportToCSV(inputData, fileName, category);
+
+    const expectedExt = '.xlsx';
+    expect(global.saveAs.mock.calls[0][1]).toBe(fileName + expectedExt);
+
+    // Restore
+    generateExportReport = realGen;
+  });
+});
