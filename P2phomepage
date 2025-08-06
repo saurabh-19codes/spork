@@ -1,0 +1,37 @@
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import PTPHomePage from '../PTPHomePage';
+
+// Mocks for API hooks and routing functions should be added as required
+
+describe('PTPHomePage', () => {
+  test('renders without crashing', () => {
+    render(<PTPHomePage router={mockRouter} />);
+    expect(screen.getByText(/DORA/i)).toBeInTheDocument();
+  });
+
+  test('loads VPs and PIs, populates selectors', async () => {
+    render(<PTPHomePage router={mockRouter} />);
+    await waitFor(() => expect(screen.getByLabelText(/Select a VP/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Select a VP/i), { target: { value: 'some-vp' } });
+    expect(mockLoadDirectorData).toHaveBeenCalled();
+  });
+
+  test('toggles GHA data endpoint', () => {
+    render(<PTPHomePage router={mockRouter} />);
+    fireEvent.click(screen.getByTestId('toggle-gha'));
+    expect(mockUseApi).toHaveBeenCalledWith('/rest/api/one-insight/doraMetricsGha', expect.anything());
+  });
+
+  test('renders metric cards from data', () => {
+    render(<PTPHomePage router={mockRouter} />);
+    expect(screen.getAllByTestId('health-metric-card')).toHaveLength(metricData.length);
+  });
+
+  test('handles metric card click navigation', () => {
+    render(<PTPHomePage router={mockRouter} />);
+    fireEvent.click(screen.getByText(/some metric/i));
+    expect(mockRouter.push).toHaveBeenCalledWith(expect.stringContaining('/coverage-report'));
+  });
+
+  // ... more tests for tooltip, back action, "UnderConstruction", etc.
+});
