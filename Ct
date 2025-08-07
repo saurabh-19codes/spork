@@ -1,0 +1,78 @@
+import React from "react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import CoverageReport from "./CoverageReport";    // Import your component
+import { exportToCSV } from "path-to-export-util"; // Mock this util if needed
+
+jest.mock('path-to-export-util');
+
+const baseProps = {
+  // ... Fill with minimal props that allow component to render
+};
+
+describe("CoverageReport Component", () => {
+  it("renders without crashing", () => {
+    render(<CoverageReport {...baseProps} />);
+    expect(screen.getByText(/Code and Functional Coverage/i)).toBeInTheDocument();
+  });
+
+  it("shows loader when directorDataLoading is true", () => {
+    render(<CoverageReport {...baseProps} directorDataLoading={true} />);
+    expect(screen.getByTestId("loader-circle")).toBeInTheDocument();
+  });
+
+  it("renders VP selector with provided options", () => {
+    render(<CoverageReport {...baseProps} vplist7={['vp1', 'vp2']} />);
+    expect(screen.getByLabelText(/Select a VP/)).toBeInTheDocument();
+    expect(screen.getByText("vp1")).toBeInTheDocument();
+    expect(screen.getByText("vp2")).toBeInTheDocument();
+  });
+
+  it("calls handleSelectChange on vp change", () => {
+    const handleSelectChange = jest.fn();
+    render(<CoverageReport {...baseProps} vplist7={['vp1']} handleSelectChange={handleSelectChange} />);
+    fireEvent.change(screen.getByLabelText(/Select a VP/), { target: { value: 'vp1' }});
+    expect(handleSelectChange).toHaveBeenCalled();
+  });
+
+  it("renders help link with correct href", () => {
+    render(<CoverageReport {...baseProps} />);
+    const link = screen.getByText(/Please follow this Link to fix code coverage issue/i);
+    expect(link.closest('a')).toHaveAttribute('href', expect.stringContaining('enterprise-confluence'));
+  });
+
+  it("renders export button and triggers downloadCoverageReport", async () => {
+    render(<CoverageReport {...baseProps} />);
+    fireEvent.click(screen.getByTestId("btnExport"));
+    await waitFor(() => {
+      expect(exportToCSV).toHaveBeenCalled();
+    });
+  });
+
+  it("renders parent table with headers and rows", () => {
+    // Provide sample directorData prop
+    render(<CoverageReport {...baseProps} data={{ body: { directorData: [ /* mock row here */ ] } }} />);
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    // Check for headers/row content as needed
+  });
+
+  it("shows 'No Records Found' when parent data is empty", () => {
+    render(<CoverageReport {...baseProps} data={{ body: { directorData: [] } }} />);
+    expect(screen.getByText(/No Records Found/i)).toBeInTheDocument();
+  });
+
+  it("opens and closes modal, displaying correct director details", () => {
+    render(<CoverageReport {...baseProps} isModalOpen={true} selectedDirector="Director1" />);
+    expect(screen.getByText(/Details of Director1/)).toBeInTheDocument();
+
+    // Simulate close (depends on your close trigger element)
+    fireEvent.click(screen.getByTestId("modal-close-button"));
+    expect(screen.queryByText(/Details of Director1/)).not.toBeInTheDocument();
+  });
+
+  it("shows LoaderCircle in Modal when drilldown data is loading", () => {
+    render(<CoverageReport {...baseProps} isModalOpen={true} isLoadingDrilldownDirData={true} />);
+    expect(screen.getByTestId('loader-circle')).toBeInTheDocument();
+  });
+
+  // Add more for edge cases, error boundaries, wrong/missing data, etc
+});
