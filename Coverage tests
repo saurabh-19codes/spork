@@ -1,0 +1,180 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import CoverageReport from './CoverageReport';
+import * as exportUtil from 'path-to-export-util'; // adjust if you have custom export
+
+// Mock router if withRouter is used
+jest.mock('next/router', () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+  }),
+}));
+
+jest.mock('path-to-export-util', () => ({
+  exportToCSV: jest.fn(),
+}));
+
+const mockDirectorData = [
+  {
+    reposQualifiedForCoverage: {
+      codeCovOnNewCode: 10,
+      functionalBddEnabled: 5,
+    },
+    gatingEnabled: {
+      codeGating: 2,
+      functionalGating: 1,
+    },
+  },
+];
+
+const mockDrilldownData = {
+  body: {
+    directorData: [
+      {
+        reposQualifiedForCoverage: {
+          codeCovOnNewCode: 99,
+          functionalBddEnabled: 88,
+        },
+        gatingEnabled: {
+          codeGating: 77,
+          functionalGating: 66,
+        },
+      },
+    ],
+  },
+};
+
+const vplist7 = ['vp1', 'vp2'];
+const activeOrg7 = { code: 'ORG123' };
+const selectedDirector = 'Director A';
+
+function setup(propsOverride = {}) {
+  // Default props that allow component to render full UI
+  const defaults = {
+    data: { body: { directorData: mockDirectorData } },
+    drilldownDirData: mockDrilldownData,
+    isLoadingDrilldownDirData: false,
+    directorDataLoading: false,
+    vplist7,
+    activeOrg7,
+    selectedDirector,
+    handleSelectChange: jest.fn(),
+    loadingVps: false,
+    isModalOpen: false,
+    setIsModalOpen: jest.fn(),
+  };
+  return render(<CoverageReport {...defaults} {...propsOverride} />);
+}
+
+describe('CoverageReport component', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders component with page title and help link', () => {
+    setup();
+    expect(screen.getByText(/Code and Functional Coverage - ORG123/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Select a VP/)).toBeInTheDocument();
+    expect(screen.getByText(/Please follow this Link to fix code coverage issue/i)).toBeInTheDocument();
+    const helpLink = screen.getByText(/fix code coverage issue/i).closest('a');
+    expect(helpLink).toHaveAttribute('href', expect.stringContaining('confluence.aexp.com'));
+    expect(helpLink).toHaveAttribute('target', '_blank');
+  });
+
+  it('renders loader during director data loading', () => {
+    setup({ directorDataLoading: true });
+    expect(screen.getByTestId('loader-circle')).toBeInTheDocument();
+  });
+
+  it('renders VP select dropdown with options and handles change', () => {
+    const handleSelectChange = jest.fn();
+    setup({ handleSelectChange });
+    expect(screen.getByLabelText(/Select a VP/)).toBeInTheDocument();
+    expect(screen.getByText('vp1')).toBeInTheDocument();
+    expect(screen.getByText('vp2')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Select a VP/), { target: { value: 'vp1' } });
+    expect(handleSelectChange).toHaveBeenCalled();
+  });
+
+  it('disables VP select when loadingVps is true', () => {
+    setup({ loadingVps: true });
+    expect(screen.getByLabelText(/Select a VP/)).toBeDisabled();
+  });
+
+  it('renders parent table with headers and rows', () => {
+    setup();
+    expect(screen.getAllByRole('columnheader').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('row')).toBeTruthy();
+    // Check cell values in rendered rows
+    expect(screen.getByText('10')).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+  });
+
+  it('displays "No Records Found" when director data is empty', () => {
+    setup({ data: { body: { directorData: [] } } });
+    expect(screen.getByText(/No Records Found/i)).toBeInTheDocument();
+  });
+
+  it('renders Export button and triggers downloadCoverageReport on click', async () => {
+    setup();
+    const exportBtn = screen.getByTestId('btnExport');
+    expect(exportBtn).toBeInTheDocument();
+    fireEvent.click(exportBtn);
+    await waitFor(() => {
+      expect(exportUtil.exportToCSV).toHaveBeenCalled();
+    });
+  });
+
+  it('does not render Export button if no directorData', () => {
+    setup({ drilldownDirData: { body: { directorData: [] } } });
+    expect(screen.queryByTestId('btnExport')).not.toBeInTheDocument();
+  });
+
+  it('renders drilldown table in modal when open and displays drilldown data', () => {
+    setup({ isModalOpen: true });
+    expect(screen.getByText(/Details of Director A/)).toBeInTheDocument();
+    // Headers + data
+    expect(screen.getByText('99')).toBeInTheDocument();
+    expect(screen.getByText('88')).toBeInTheDocument();
+    expect(screen.getByText('77')).toBeInTheDocument();
+    expect(screen.getByText('66')).toBeInTheDocument();
+  });
+
+  it('shows LoaderCircle in modal when drilldownDirData is loading', () => {
+    setup({ isModalOpen: true, isLoadingDrilldownDirData: true });
+    expect(screen.getAllByTestId('loader-circle').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('closes modal when close is triggered', () => {
+    const setIsModalOpen = jest.fn();
+    setup({ isModalOpen: true, setIsModalOpen });
+    fireEvent.click(screen.getByLabelText(/close/i));
+    expect(setIsModalOpen).toHaveBeenCalledWith(false);
+  });
+
+  it('displays "No Records Found" in modal if drilldown directorData empty', () => {
+    setup({ isModalOpen: true, drilldownDirData: { body: { directorData: [] } } });
+    expect(screen.getByText(/No Records Found/i)).toBeInTheDocument();
+  });
+
+  it('renders correctly when all data absent', () => {
+    setup({
+      data: { body: { directorData: [] } },
+      drilldownDirData: { body: { directorData: [] } },
+      isLoadingDrilldownDirData: false,
+      directorDataLoading: false,
+      vplist7: [],
+    });
+    expect(screen.getByText(/No Records Found/i)).toBeInTheDocument();
+  });
+
+  // Add more tests below for:
+  // - error boundaries
+  // - bad/malformed API data
+  // - table sorting/column rendering logic (if present)
+  // - button disabled scenarios (if Export can be disabled)
+  // - page navigation/back button click (if testable via react-router context)
+});
+
