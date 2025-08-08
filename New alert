@@ -1,0 +1,63 @@
+describe('AlertInfo Component', () => {
+  const defaultProps = {
+    data: {
+      alerts: ['E15968', 'E16724', 'E18166'],
+      info: [{}],
+      previousPi: 'PI-01',
+      featureSayDoRatio: { Total: '85%' },
+    }
+  };
+
+  it('should render without crashing', () => {
+    const wrapper = shallow(<AlertInfo {...defaultProps} />);
+    expect(wrapper.exists()).toBe(true);
+  });
+
+  it('should match snapshot', () => {
+    const wrapper = shallow(<AlertInfo {...defaultProps} />);
+    expect(wrapper).toMatchSnapshot();
+  });
+
+  it('should render each alert as Alert component', () => {
+    const wrapper = shallow(<AlertInfo {...defaultProps} />);
+    // This counts number of 'Alert' components rendered, adjust selector if needed
+    expect(wrapper.find('Alert')).toHaveLength(defaultProps.data.alerts.length);
+  });
+
+  it('should display alert codes', () => {
+    const wrapper = shallow(<AlertInfo {...defaultProps} />);
+    defaultProps.data.alerts.forEach(code => {
+      expect(wrapper.text()).toContain(code);
+    });
+  });
+
+  it('should render info block/link when info[0] is present', () => {
+    const wrapper = shallow(<AlertInfo {...defaultProps} />);
+    expect(wrapper.find('a[role="button"]').at(1).exists()).toBe(true);
+    expect(wrapper.find('a[role="button"]').at(1).prop('href'))
+      .toContain('Churn+Rate');
+  });
+
+  it('should NOT render info block/link when info[0] is missing', () => {
+    const propsNoInfo = {
+      data: {
+        ...defaultProps.data,
+        info: [] // no info
+      }
+    };
+    const wrapper = shallow(<AlertInfo {...propsNoInfo} />);
+    // Should have only one button/link (alerts), not the info one
+    expect(wrapper.find('a[role="button"]').length).toBe(1);
+  });
+
+  it('should handle empty alerts gracefully', () => {
+    const propsNoAlerts = {
+      data: {
+        ...defaultProps.data,
+        alerts: []
+      }
+    };
+    const wrapper = shallow(<AlertInfo {...propsNoAlerts} />);
+    expect(wrapper.find('Alert').length).toBe(0);
+  });
+});
