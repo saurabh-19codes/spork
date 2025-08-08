@@ -1,0 +1,38 @@
+describe('AlertInfo Component', () => {
+  const mockData = [
+    {
+      alert: ['This is an alert message'],
+      info: ['Some additional info']
+    }
+  ];
+
+  test('renders without crashing', () => {
+    render(<AlertInfo data={mockData} />);
+    expect(screen.getByTestId('Cfr')).toBeInTheDocument();
+  });
+
+  test('displays alert and info from data', () => {
+    render(<AlertInfo data={mockData} />);
+    expect(screen.getByText('This is an alert message')).toBeInTheDocument();
+    expect(screen.getByText('Some additional info')).toBeInTheDocument();
+  });
+
+  test('Heading is level 2', () => {
+    render(<AlertInfo data={mockData} />);
+    // Assumes the Heading component renders an h2 under the hood
+    expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument();
+  });
+
+  test('handles empty data gracefully', () => {
+    render(<AlertInfo data={[]} />);
+    // Should not throw errors or render alert/info
+    expect(screen.queryByText(/alert/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/info/i)).not.toBeInTheDocument();
+  });
+
+  test('handles missing alert and info fields', () => {
+    render(<AlertInfo data={[{}]} />);
+    expect(screen.queryByText(/alert/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/info/i)).not.toBeInTheDocument();
+  });
+});
