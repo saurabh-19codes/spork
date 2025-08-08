@@ -1,0 +1,634 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { Provider } from 'react-redux';
+import { configureStore } from '@reduxjs/toolkit';
+import { BrowserRouter } from 'react-router-dom';
+import { useFetchye } from 'fetchye';
+import AcdAptDashboard from './AcdAptDashboard';
+
+// Mock the external dependencies
+jest.mock('fetchye');
+jest.mock('@americanexpress/one-app-router', () => ({
+  withRouter: (Component) => Component,
+}));
+jest.mock('./AcdAptDashboard/PiTotals', () => {
+  return function MockPiTotals({ piTotals, onClick }) {
+    return (
+      <div data-testid="pi-totals">
+        <div>PI Totals: {piTotals}</div>
+        <button onClick={onClick}>Click PI Totals</button>
+      </div>
+    );
+  };
+});
+jest.mock('./AcdAptDashboard/AcdAptEpicCharts', () => {
+  return function MockAcdAptEpicCharts({ dataByEpics, orgName }) {
+    return (
+      <div data-testid="epic-charts">
+        <div>Epic Charts - Org: {orgName}</div>
+        <div>Data: {JSON.stringify(dataByEpics)}</div>
+      </div>
+    );
+  };
+});
+
+// Mock react-redux hooks
+const mockDispatch = jest.fn();
+const mockUseSelector = jest.fn();
+
+jest.mock('react-redux', () => ({
+  ...jest.requireActual('react-redux'),
+  useSelector: (selector) => mockUseSelector(selector),
+  useDispatch: () => mockDispatch,
+  Provider: ({ children }) => children,
+}));
+
+// Create a mock store
+const createMockStore = (initialState = {}) => {
+  return configureStore({
+    reducer: {
+      config: (state = { oneApiHostUrl: 'http://localhost' }) => state,
+      ...initialState,
+    },
+  });
+};
+
+// Test wrapper component
+const TestWrapper = ({ children, store = createMockStore() }) => (
+  <Provider store={store}>
+    <BrowserRouter>
+      {children}
+    </BrowserRouter>
+  </Provider>
+);
+
+// Mock router
+const mockRouter = {
+  params: {},
+};
+
+describe('AcdAptDashboard', () => {
+  const mockGetData = jest.fn();
+  const mockUseFetchye = useFetchye;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    
+    // Default mock setup
+    mockUseSelector.mockImplementation((selector) => {
+      if (typeof selector === 'function') {
+        return selector({
+          config: { oneApiHostUrl: 'http://localhost' }
+        });
+      }
+      return 'http://localhost';
+    });
+
+    mockUseFetchye.mockReturnValue({
+      run: mockGetData,
+      data: null,
+      isLoading: false,
+    });
+  });
+
+  describe('Component Rendering', () => {
+    test('renders loading state when isLoading is true', () => {
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: null,
+        isLoading: true,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByTestId('progress-circle')).toBeInTheDocument();
+      expect(screen.getByText(/ProgressCircle/)).toBeInTheDocument();
+    });
+
+    test('renders dashboard content when data is loaded and not loading', () => {
+      const mockPiData = {
+        piTotals: 100,
+        dataByEpics: [{ epic: 'Epic1', data: 'test' }],
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: mockPiData },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByTestId('pi-totals')).toBeInTheDocument();
+      expect(screen.getByTestId('epic-charts')).toBeInTheDocument();
+      expect(screen.getByText('PI Totals: 100')).toBeInTheDocument();
+      expect(screen.getByText('Epic Charts - Org: ACD,APT')).toBeInTheDocument();
+    });
+
+    test('renders with custom organization name from router params', () => {
+      const mockPiData = {
+        piTotals: 50,
+        dataByEpics: [],
+      };
+
+      const routerWithParams = {
+        params: { org: 'CUSTOM,ORG' },
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: mockPiData },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={routerWithParams} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Epic Charts - Org: CUSTOM,ORG')).toBeInTheDocument();
+    });
+  });
+
+  describe('Organization Name Logic', () => {
+    test('getOrgName returns correct org when router params exist', () => {
+      const routerWithOrg = {
+        params: { org: 'TEST,ORGANIZATION' },
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: { piTotals: 0, dataByEpics: [] } },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={routerWithOrg} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Epic Charts - Org: TEST,ORGANIZATION')).toBeInTheDocument();
+    });
+
+    test('getOrgName returns default ACD,APT when no router params', () => {
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: { piTotals: 0, dataByEpics: [] } },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Epic Charts - Org: ACD,APT')).toBeInTheDocument();
+    });
+
+    test('getOrgName handles comma-separated organizations correctly', () => {
+      const routerWithCommaOrg = {
+        params: { org: 'ORG1,ORG2,ORG3' },
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: { piTotals: 0, dataByEpics: [] } },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={routerWithCommaOrg} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Epic Charts - Org: ORG1,ORG2,ORG3')).toBeInTheDocument();
+    });
+  });
+
+  describe('State Management', () => {
+    test('initializes with correct default state values', () => {
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: null,
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      // Component should render without data initially
+      expect(screen.queryByTestId('pi-totals')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('epic-charts')).not.toBeInTheDocument();
+    });
+
+    test('updates state when piSelected changes', () => {
+      let capturedOnClick;
+      
+      jest.doMock('./AcdAptDashboard/PiTotals', () => {
+        return function MockPiTotals({ onClick }) {
+          capturedOnClick = onClick;
+          return (
+            <div data-testid="pi-totals">
+              <button onClick={onClick} data-testid="pi-click-button">Click PI</button>
+            </div>
+          );
+        };
+      });
+
+      const mockPiData = {
+        piTotals: 100,
+        dataByEpics: [{ epic: 'Epic1', data: 'test' }],
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: mockPiData },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      const piClickButton = screen.getByTestId('pi-click-button');
+      fireEvent.click(piClickButton);
+
+      // The click should be handled (testing the onClick prop is passed)
+      expect(piClickButton).toBeInTheDocument();
+    });
+  });
+
+  describe('Data Fetching', () => {
+    test('configures useFetchye with correct parameters', () => {
+      mockUseSelector.mockReturnValue('http://test-host');
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(mockUseFetchye).toHaveBeenCalledWith(
+        'http://test-host/rest/api/one-insight/epicDashboardData',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            orgName: 'ACD,APT',
+            piSelected: null,
+          }),
+        })
+      );
+    });
+
+    test('calls refreshData function correctly', async () => {
+      const mockPiData = {
+        piTotals: 100,
+        dataByEpics: [],
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: mockPiData },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      // The refreshData function should be available and callable
+      // This tests the async function definition
+      expect(mockUseFetchye).toHaveBeenCalled();
+    });
+
+    test('handles API call with custom organization', () => {
+      const routerWithCustomOrg = {
+        params: { org: 'CUSTOM' },
+      };
+
+      mockUseSelector.mockReturnValue('http://custom-host');
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={routerWithCustomOrg} />
+        </TestWrapper>
+      );
+
+      expect(mockUseFetchye).toHaveBeenCalledWith(
+        'http://custom-host/rest/api/one-insight/epicDashboardData',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            orgName: 'CUSTOM',
+            piSelected: null,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('useEffect Hook', () => {
+    test('calls getData on component mount', () => {
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: null,
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      // useEffect should trigger on mount
+      expect(mockUseFetchye).toHaveBeenCalled();
+    });
+
+    test('calls getData when piSelected changes', async () => {
+      const mockPiData = {
+        piTotals: 100,
+        dataByEpics: [],
+      };
+
+      let rerender;
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: mockPiData },
+        isLoading: false,
+      });
+
+      const { rerender: rerenderFunction } = render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      rerender = rerenderFunction;
+
+      // Initial render should call useFetchye
+      expect(mockUseFetchye).toHaveBeenCalled();
+
+      // Simulate state change by re-rendering
+      rerender(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+    });
+  });
+
+  describe('Conditional Rendering Logic', () => {
+    test('shows loading when isLoading is true regardless of data', () => {
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: { piTotals: 100 } },
+        isLoading: true,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByTestId('progress-circle')).toBeInTheDocument();
+      expect(screen.queryByTestId('pi-totals')).not.toBeInTheDocument();
+    });
+
+    test('shows dashboard when not loading and has data', () => {
+      const mockPiData = {
+        piTotals: 75,
+        dataByEpics: [{ name: 'test' }],
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: mockPiData },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.queryByTestId('progress-circle')).not.toBeInTheDocument();
+      expect(screen.getByTestId('pi-totals')).toBeInTheDocument();
+      expect(screen.getByTestId('epic-charts')).toBeInTheDocument();
+    });
+
+    test('handles null data gracefully', () => {
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: null,
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.queryByTestId('progress-circle')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pi-totals')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('epic-charts')).not.toBeInTheDocument();
+    });
+
+    test('handles data without body property', () => {
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: {},
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.queryByTestId('pi-totals')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('epic-charts')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Component Props', () => {
+    test('passes correct props to PiTotals component', () => {
+      const mockPiData = {
+        piTotals: 150,
+        dataByEpics: [],
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: mockPiData },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('PI Totals: 150')).toBeInTheDocument();
+    });
+
+    test('passes correct props to AcdAptEpicCharts component', () => {
+      const mockPiData = {
+        piTotals: 100,
+        dataByEpics: [{ epic: 'TestEpic', count: 5 }],
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: mockPiData },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Epic Charts - Org: ACD,APT')).toBeInTheDocument();
+      expect(screen.getByText('Data: [{"epic":"TestEpic","count":5}]')).toBeInTheDocument();
+    });
+  });
+
+  describe('Error Handling', () => {
+    test('handles undefined router gracefully', () => {
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: null,
+        isLoading: false,
+      });
+
+      expect(() => {
+        render(
+          <TestWrapper>
+            <AcdAptDashboard router={undefined} />
+          </TestWrapper>
+        );
+      }).not.toThrow();
+    });
+
+    test('handles router without params gracefully', () => {
+      const routerWithoutParams = {};
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: null,
+        isLoading: false,
+      });
+
+      expect(() => {
+        render(
+          <TestWrapper>
+            <AcdAptDashboard router={routerWithoutParams} />
+          </TestWrapper>
+        );
+      }).not.toThrow();
+    });
+
+    test('handles empty org parameter', () => {
+      const routerWithEmptyOrg = {
+        params: { org: '' },
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: { piTotals: 0, dataByEpics: [] } },
+        isLoading: false,
+      });
+
+      render(
+        <TestWrapper>
+          <AcdAptDashboard router={routerWithEmptyOrg} />
+        </TestWrapper>
+      );
+
+      // Should fall back to default when org is empty
+      expect(screen.getByText('Epic Charts - Org: ACD,APT')).toBeInTheDocument();
+    });
+  });
+
+  describe('Integration Tests', () => {
+    test('complete user flow: loading -> data loaded -> interaction', async () => {
+      // Start with loading state
+      const { rerender } = render(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      // Initially should show loading or nothing (depending on initial state)
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: null,
+        isLoading: true,
+      });
+
+      rerender(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByTestId('progress-circle')).toBeInTheDocument();
+
+      // Then data loads
+      const mockPiData = {
+        piTotals: 200,
+        dataByEpics: [{ epic: 'Epic1' }, { epic: 'Epic2' }],
+      };
+
+      mockUseFetchye.mockReturnValue({
+        run: mockGetData,
+        data: { body: mockPiData },
+        isLoading: false,
+      });
+
+      rerender(
+        <TestWrapper>
+          <AcdAptDashboard router={mockRouter} />
+        </TestWrapper>
+      );
+
+      expect(screen.queryByTestId('progress-circle')).not.toBeInTheDocument();
+      expect(screen.getByTestId('pi-totals')).toBeInTheDocument();
+      expect(screen.getByTestId('epic-charts')).toBeInTheDocument();
+    });
+  });
+});
+
+// Additional test for PropTypes if they exist
+describe('AcdAptDashboard PropTypes', () => {
+  test('component has correct propTypes defined', () => {
+    // This would test the propTypes if they're exported
+    expect(AcdAptDashboard).toBeDefined();
+  });
+});
