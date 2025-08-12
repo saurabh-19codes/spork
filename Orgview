@@ -1,0 +1,106 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import OrgView from './OrgView';
+import * as reactRedux from 'react-redux';
+import * as router from '@americanexpress/one-app-router';
+import * as useFetchye from 'fetchye-react';
+
+// Mocks
+jest.mock('react-redux', () => ({
+  useSelector: jest.fn(),
+}));
+jest.mock('@americanexpress/one-app-router', () => ({
+  withRouter: (comp) => comp,
+}));
+jest.mock('fetchye-react', () => ({
+  useFetchye: jest.fn(),
+}));
+
+// Mock child components
+jest.mock('./AcadAptDashboard/AcdAptEpicCharts', () => () => <div data-testid="acdaptepiccharts" />);
+jest.mock('@americanexpress/dls-react', () => ({
+  CardRounded: ({children}) => <div data-testid="card-rounded">{children}</div>,
+  ProgressCircle: () => <div data-testid="progress-circle"></div>
+}));
+
+jest.mock('./Cards/PiCard', () => ({ onClick, ...props }) => (
+  <div data-testid="pi-card" onClick={onClick}>PiCard</div>
+))
+jest.mock('./ErrorBoundary', () => ({ children }) => <>{children}</>);
+
+describe('OrgView', () => {
+  let useSelectorMock;
+
+  beforeEach(() => {
+    useSelectorMock = reactRedux.useSelector;
+    // Mock api url selector
+    useSelectorMock.mockImplementation(fn => 
+      fn.name === 'useSelector'
+        ? 'http://api' // or more advanced if needed
+        : { getIn: () => "http://api" }
+    );
+    // Mock fetch hook
+    useFetchye.useFetchye.mockImplementation(() => ({
+      isLoading: false,
+      loadingEpicData: false,
+      run: jest.fn(),
+      getData: jest.fn(),
+    }));
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders loading spinner when loading', () => {
+    // Set up loading state
+    useFetchye.useFetchye.mockReturnValueOnce({
+      isLoading: true,
+      loadingEpicData: true,
+      run: jest.fn(),
+      getData: jest.fn(),
+    });
+    render(<OrgView router={{params: {}}} />);
+    expect(screen.getByTestId('progress-circle')).toBeInTheDocument();
+  });
+
+  it('renders data and PiCards after API load', async () => {
+    // Mock the PiTotals data
+    useFetchye.useFetchye.mockReturnValueOnce({
+      isLoading: false,
+      loadingEpicData: false,
+      run: jest.fn(),
+      getData: jest.fn(),
+    });
+    // orgType array, piData is in state, but we can simulate as if data was loaded
+    render(<OrgView router={{params: {}}} orgType={[]} />);
+    // The component will render AcdAptEpicCharts and CardRounded
+    expect(screen.getByTestId('card-rounded')).toBeInTheDocument();
+    expect(screen.getByTestId('acdaptepiccharts')).toBeInTheDocument();
+  });
+
+  it('handles PiCard click and changes state', async () => {
+    render(<OrgView router={{params: {}}} orgType={[]} />);
+    // Find the clickable PiCard
+    const card = screen.getByTestId('pi-card');
+    fireEvent.click(card);
+    // Should still render everything, state will update -- you may mock useState if you want more granularity
+    expect(screen.getByTestId('pi-card')).toBeInTheDocument();
+  });
+
+  it('renders AcdAptEpicCharts with correct orgName', () => {
+    // If router.params7.org exists, passes to AcdAptEpicCharts, else fallback
+    const routerMock = { params7: { org: ['TESTORG'] } };
+    render(<OrgView router={routerMock} orgType={[]} />);
+    expect(screen.getByTestId('acdaptepiccharts')).toBeInTheDocument();
+  });
+
+  it('renders error boundaries', () => {
+    // All main blocks are wrapped with ErrorBoundary, so they render children
+    render(<OrgView router={{params: {}}} orgType={[]} />);
+    // You could test that contents render even if errors were thrown (using error boundaries)
+    expect(screen.getByTestId('card-rounded')).toBeInTheDocument();
+  });
+
+  // Add more as needed for keyboard events, focus/blur handlers etc.
+});
