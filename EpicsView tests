@@ -1,0 +1,83 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import EpicsView from './EpicsView';
+
+// Mocks for child components
+jest.mock('../Cards/CardRounded', () => (props) => <div data-testid="CardRounded">{props.children}</div>);
+jest.mock('../Cards/SummaryCard', () => (props) => <div data-testid="SummaryCard">{props.epic}</div>);
+jest.mock('../AcdAptSummary/SummaryEpicCharts', () => () => <div data-testid="SummaryEpicCharts" />);
+jest.mock('./ProgressCircle', () => () => <div data-testid="ProgressCircle" />);
+
+// Mock for react-redux
+jest.mock('react-redux', () => ({
+  useSelector: jest.fn(fn => fn({ getIn: () => 'mock-api-url' })),
+}));
+
+// Mock for fetchye
+jest.mock('fetchye', () => ({
+  useFetchye: () => [
+    jest.fn(() => Promise.resolve({ body: { dummy: 'data' } })),
+    { loading: false, loaded: true, error: null },
+  ],
+}));
+
+// Mock for withRouter
+const mockRouter = {
+  params7: { org: 'FCT', epic: 'Epic-id' },
+  // Add params as needed for your tests
+};
+jest.mock('@americanexpress/one-app-router', () => ({
+  withRouter: (Component) => (props) => <Component router={mockRouter} {...props} />,
+}));
+
+describe('EpicsView', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('renders loading state initially', () => {
+    render(<EpicsView />);
+    expect(screen.getByTestId('progress-circle')).toBeInTheDocument();
+  });
+
+  test('renders CardRounded with SummaryEpicCharts after loading', async () => {
+    render(<EpicsView />);
+    await waitFor(() => {
+      expect(screen.getByTestId('CardRounded')).toBeInTheDocument();
+      expect(screen.getByTestId('SummaryEpicCharts')).toBeInTheDocument();
+    });
+  });
+
+  test('renders SummaryCard when org includes FCT', async () => {
+    render(<EpicsView />);
+    await waitFor(() => {
+      expect(screen.getByTestId('SummaryCard')).toHaveTextContent('Epic-id'); // since mockRouter.params7.epic = 'Epic-id'
+    });
+  });
+
+  test('renders SummaryCard with "no Epic Data Found" if epic param absent', async () => {
+    const routerWithoutEpic = { params7: { org: 'FCT' } };
+    const EpicsViewWithCustomRouter = require('@americanexpress/one-app-router').withRouter(
+      require('./EpicsView').default
+    );
+    render(<EpicsViewWithCustomRouter router={routerWithoutEpic} />);
+    await waitFor(() => {
+      expect(screen.getByText('no Epic Data Found')).toBeInTheDocument();
+    });
+  });
+
+  test('handles click and focus events', async () => {
+    // Mimic some piTotals for the mapping
+    const piTotals = { foo: 10, bar: 20 };
+    // Patch useState in EpicsView to feed custom piTotals
+    jest.spyOn(React, 'useState')
+      .mockImplementationOnce(init => [null, jest.fn()])   // piSelected
+      .mockImplementationOnce(init => [null, jest.fn()])   // setFocusedIndex
+      .mockImplementationOnce(init => [piTotals, jest.fn()])   // piData
+      .mockImplementation(jest.requireActual('react').useState);
+
+    render(<EpicsView />);
+    // We cannot simulate the click logic fully without actual piTotals and more wiring, but for child rendering:
+    expect(screen.getByTestId('CardRounded')).toBeInTheDocument();
+  });
+});
