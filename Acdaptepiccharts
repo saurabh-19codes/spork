@@ -1,0 +1,59 @@
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react';
+import AcdAptEpicCharts from '../../../src/components/AcdAptDashboard/AcdAptEpicCharts';
+
+const sampleData = {
+  'SayDoRatio: 0% - E193021 ...': {
+    finalized: 1,
+    'Uncommitted Delivered': 0,
+    'sayDoRatio: 0%': 0,
+    'Committed Delivered': 0,
+    beingGroomed: 1,
+    beingWorked: 4,
+    featureCount: 6,
+    'Committed Delivered%': 0,
+  }
+};
+
+describe('AcdAptEpicCharts additional coverage', () => {
+  it('renders gracefully with empty dataByEpics', () => {
+    const { getByTestId } = render(
+      <AcdAptEpicCharts dataByEpics={{}} epic={null} feature={true} orgName={['FCT']} />
+    );
+    // You may not have dataEpic rendered if data is empty; adjust expectation accordingly
+  });
+
+  it('handles missing feature prop', () => {
+    const { getByTestId } = render(
+      <AcdAptEpicCharts dataByEpics={sampleData} epic={{ params: { epic: 'E1', org: 'ORG' } }} orgName={['FCT']} />
+    );
+    expect(getByTestId('dataEpic')).toBeInTheDocument();
+  });
+
+  it('renders with a different orgName', () => {
+    const { getByTestId } = render(
+      <AcdAptEpicCharts dataByEpics={sampleData} epic={{ params: { epic: 'E1', org: 'ORG' } }} feature={true} orgName={['OTHER']} />
+    );
+    expect(getByTestId('dataEpic')).toBeInTheDocument();
+  });
+
+  it('handles missing params gracefully', () => {
+    const { getByTestId } = render(
+      <AcdAptEpicCharts dataByEpics={sampleData} epic={{}} feature={true} orgName={['FCT']} />
+    );
+    expect(getByTestId('dataEpic')).toBeInTheDocument();
+  });
+
+  it('handles empty orgName gracefully', () => {
+    const { getByTestId } = render(
+      <AcdAptEpicCharts dataByEpics={sampleData} epic={{ params: { epic: 'E1', org: 'ORG' } }} feature={true} orgName={[]} />
+    );
+    expect(getByTestId('dataEpic')).toBeInTheDocument();
+  });
+
+  // Optional: Test possible click handlers (depends on your chart implementation)
+  // it('fires click handler if provided', () => {
+  //   const onClick = jest.fn();
+  //   // inject handler to chart if possible and test for user interactions
+  // });
+});
