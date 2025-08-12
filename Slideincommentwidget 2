@@ -1,3 +1,30 @@
+it('fetches comments again when postedComment or postedReply is truthy', () => {
+  let callCount = 0;
+  mockUseApp.mockImplementation(() => {
+    callCount++;
+    if (callCount % 3 === 1) {
+      return { isLoading: false, data: { body: [] }, run: getCommentsMock };
+    }
+    if (callCount % 3 === 2) {
+      // postComment with truthy data to trigger effect
+      return { isLoading: false, data: { body: ['ok'] }, run: postCommentMock };
+    }
+    // postReply with falsy
+    return { isLoading: false, data: { body: [] }, run: postReplyMock };
+  });
+
+  mockUseComments.mockReturnValue({
+    isOpen: true,
+    closeComments: mockCloseComments,
+    payload: { id: 1 },
+  });
+
+  render(<SlideInCommentsWidget />);
+
+  // After initial render, useEffect sees postedComment truthy → calls getComments again
+  expect(getCommentsMock).toHaveBeenCalledTimes(2); // initial + effect
+});
+////////////////////////////////=//
 beforeEach(() => {
   jest.clearAllMocks();
 
