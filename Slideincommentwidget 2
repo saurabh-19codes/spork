@@ -1,3 +1,37 @@
+beforeEach(() => {
+  jest.clearAllMocks();
+
+  getCommentsMock = jest.fn();
+  postCommentMock = jest.fn();
+  postReplyMock = jest.fn();
+
+  mockUseComments.mockReturnValue({
+    isOpen: true,
+    closeComments: mockCloseComments,
+    payload: { id: 1 },
+  });
+
+  // Return mocks in exact call order for the first render
+  let callCount = 0;
+  mockUseApp.mockImplementation(() => {
+    callCount++;
+    if (callCount === 1) {
+      return { isLoading: false, data: { body: [] }, run: getCommentsMock };
+    }
+    if (callCount === 2) {
+      return { isLoading: false, run: postCommentMock };
+    }
+    if (callCount === 3) {
+      return { isLoading: false, run: postReplyMock };
+    }
+    // Any later calls (due to re-renders) still return safe default
+    return { isLoading: false, run: jest.fn(), data: { body: [] } };
+  });
+});
+
+
+
+
 // SlideInCommentsWidget.spec.tsx
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
