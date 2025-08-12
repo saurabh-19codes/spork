@@ -1,116 +1,118 @@
+// SlideInCommentsWidget.spec.tsx
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import SlideInCommentsWidget from './SlideInCommentsWidget';
 
-// Mock dependencies
-jest.mock('../hooks/useAuthData', () => ({
-  __esModule: true,
-  default: jest.fn(() => ({})),
-}));
-
-jest.mock('../contexts/CommentsContext', () => ({
-  __esModule: true,
-  useComments: jest.fn(),
-}));
-
+// Mock hooks and dependencies
 jest.mock('@americanexpress/one-insight-toolkit', () => ({
-  SlideInComments: ({ onCloseBtnClick, onSubmitBtnClick, onReplyBtnClick }) => (
+  SlideInComments: jest.fn(({ onCloseBtnClick, onSubmitBtnClick, onReplyBtnClick }) => (
     <div>
-      <button onClick={onCloseBtnClick}>Close</button>
-      <button onClick={() => onSubmitBtnClick('test comment')}>Submit</button>
-      <button
-        onClick={() =>
-          onReplyBtnClick('reply message', { commentId: 123 })
-        }
-      >
-        Reply
-      </button>
+      <button onClick={onCloseBtnClick}>close</button>
+      <button onClick={() => onSubmitBtnClick('new comment')}>submit</button>
+      <button onClick={() => onReplyBtnClick('reply text', { commentId: 123 })}>reply</button>
     </div>
-  ),
-  objToQueryParams: jest.fn(() => 'query=params'),
+  )),
+  objToQueryParams: jest.fn(() => 'mockQuery'),
+}));
+
+const mockUseApp = jest.fn();
+jest.mock('../hooks/useAuthData', () => ({
+  useApp: () => mockUseApp(),
+}));
+
+const mockCloseComments = jest.fn();
+const mockUseComments = jest.fn();
+jest.mock('../contexts/CommentsContext', () => ({
+  useComments: () => mockUseComments(),
 }));
 
 describe('SlideInCommentsWidget', () => {
-  let mockCloseComments, mockGetComments, mockPostComment, mockPostReplyComment;
+  let getCommentsMock: jest.Mock;
+  let postCommentMock: jest.Mock;
+  let postReplyMock: jest.Mock;
 
-  const setup = (overrides = {}) => {
-    mockCloseComments = jest.fn();
-    mockGetComments = jest.fn();
-    mockPostComment = jest.fn();
-    mockPostReplyComment = jest.fn();
+  beforeEach(() => {
+    jest.clearAllMocks();
 
-    const mockUseComments = require('../contexts/CommentsContext').useComments;
+    getCommentsMock = jest.fn();
+    postCommentMock = jest.fn();
+    postReplyMock = jest.fn();
+
+    // Default mocks for hooks
     mockUseComments.mockReturnValue({
       isOpen: true,
       closeComments: mockCloseComments,
-      payload: { some: 'data' },
+      payload: { id: 1 },
     });
 
-    const mockUseAuthData = require('../hooks/useAuthData').default;
-    mockUseAuthData.mockImplementation((url, opts) => {
-      if (url.includes('/v2/comments') && opts.method === 'POST') {
-        if (opts.payload.reply) {
-          return { isLoading: false, run: mockPostReplyComment, data: 'reply posted' };
-        }
-        return { isLoading: false, run: mockPostComment, data: 'comment posted' };
-      }
-      return { isLoading: false, run: mockGetComments, data: { body: [] } };
-    });
+    mockUseApp
+      // useApp for getComments
+      .mockReturnValueOnce({
+        isLoading: false,
+        data: { body: [] },
+        run: getCommentsMock,
+      })
+      // useApp for postComment
+      .mockReturnValueOnce({
+        isLoading: false,
+        run: postCommentMock,
+      })
+      // useApp for postReplyComment
+      .mockReturnValueOnce({
+        isLoading: false,
+        run: postReplyMock,
+      });
+  });
 
-    return render(<SlideInCommentsWidget {...overrides} />);
-  };
+  it('renders and closes comments on button click', () => {
+    render(<SlideInCommentsWidget />);
 
-  it('renders and calls closeComments when close button clicked', () => {
-    setup();
-    fireEvent.click(screen.getByText('Close'));
+    fireEvent.click(screen.getByText('close'));
     expect(mockCloseComments).toHaveBeenCalled();
   });
 
-  it('submits a comment and calls postComment', () => {
-    setup();
-    fireEvent.click(screen.getByText('Submit'));
-    expect(mockPostComment).toHaveBeenCalled();
-  });
-
-  it('sets reply state and triggers postReplyComment via useEffect', () => {
-    setup();
-    fireEvent.click(screen.getByText('Reply'));
-    expect(mockPostReplyComment).toHaveBeenCalled();
-  });
-
-  it('calls getComments when isOpen and payload are present', () => {
-    setup();
-    expect(mockGetComments).toHaveBeenCalled();
-  });
-
-  it('handles data.body not being an array', () => {
-    const mockUseAuthData = require('../hooks/useAuthData').default;
-    mockUseAuthData.mockImplementation((url, opts) => {
-      if (url.includes('/v2/comments') && opts.method === 'POST') {
-        return { isLoading: false, run: jest.fn(), data: null };
-      }
-      return { isLoading: false, run: jest.fn(), data: { body: 'not-an-array' } };
+  it('calls setComment and triggers postComment useEffect', () => {
+    jest.useFakeTimers();
+    render(<SlideInCommentsWidget />);
+    fireEvent.click(screen.getByText('submit'));
+    act(() => {
+      jest.runAllTimers();
     });
-
-    setup();
-    // should still render without crash
-    expect(screen.getByText('Close')).toBeInTheDocument();
+    expect(postCommentMock).toHaveBeenCalled();
   });
 
-  it('does not call postReplyComment when reply.msg is empty or commentId is null', () => {
-    const mockUseAuthData = require('../hooks/useAuthData').default;
-    mockUseAuthData.mockImplementation((url, opts) => {
-      return { isLoading: false, run: jest.fn(), data: { body: [] } };
+  it('calls setReply and triggers postReply useEffect', () => {
+    jest.useFakeTimers();
+    render(<SlideInCommentsWidget />);
+    fireEvent.click(screen.getByText('reply'));
+    act(() => {
+      jest.runAllTimers();
     });
+    expect(postReplyMock).toHaveBeenCalled();
+  });
 
-    const mockUseComments = require('../contexts/CommentsContext').useComments;
-    mockUseComments.mockReturnValue({
-      isOpen: true,
-      closeComments: jest.fn(),
-      payload: {},
-    });
+  it('fetches comments when isOpen and payload change', () => {
+    render(<SlideInCommentsWidget />);
+    expect(getCommentsMock).toHaveBeenCalled();
+  });
+
+  it('renders empty messages array when data.body is not an array', () => {
+    mockUseApp
+      .mockReturnValueOnce({
+        isLoading: false,
+        data: { body: {} }, // Not an array
+        run: getCommentsMock,
+      })
+      .mockReturnValueOnce({
+        isLoading: false,
+        run: postCommentMock,
+      })
+      .mockReturnValueOnce({
+        isLoading: false,
+        run: postReplyMock,
+      });
 
     render(<SlideInCommentsWidget />);
-    // nothing to assert for run here since effect won't fire
+    expect(getCommentsMock).toHaveBeenCalled();
   });
 });
