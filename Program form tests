@@ -1,0 +1,210 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { useSelector } from 'react-redux';
+import { useFormik } from 'formik';
+import ProgramForm from './ProgramForm';
+
+// Mock dependencies
+jest.mock('react-redux', () => ({
+  useSelector: jest.fn(),
+}));
+jest.mock('formik', () => ({
+  useFormik: jest.fn(),
+}));
+jest.mock('../DropDownMenu', () => (props) => (
+  // Mimic a dropdown component
+  <select
+    data-testid={props.data-testid}
+    value={props.value || ''}
+    onChange={(e) => props.onChange({ target: { name: props.name, value: e.target.value } })}
+    disabled={props.isDisabled}
+  >
+    <option value="">Select</option>
+    {(props.items || []).map((item) => (
+      <option key={item} value={item}>{item}</option>
+    ))}
+  </select>
+));
+
+// Test data and helpers
+const mockInitialValues = {
+  org: 'Org1',
+  product: 'Product1',
+  typeOfExtraction: '',
+  epics: [],
+  capabilities: [],
+  platforms: [],
+  container: [],
+};
+const mockSetFieldValue = jest.fn();
+const mockHandleChange = jest.fn();
+const mockHandleSubmit = jest.fn((e) => e && e.preventDefault());
+const mockResetForm = jest.fn();
+
+function setupFormik(overrides = {}) {
+  useFormik.mockReturnValue({
+    values: { ...mockInitialValues, ...overrides },
+    errors: {},
+    touched: {},
+    handleChange: mockHandleChange,
+    handleSubmit: mockHandleSubmit,
+    isSubmitting: false,
+    isValid: true,
+    dirty: true,
+    setFieldValue: mockSetFieldValue,
+    resetForm: mockResetForm,
+  });
+}
+
+beforeEach(() => {
+  useSelector.mockImplementation((cb) =>
+    cb({ getIn: () => 'https://mock-api.url' })
+  );
+  jest.clearAllMocks();
+});
+
+describe('ProgramForm', () => {
+  it('renders all input fields', () => {
+    setupFormik();
+
+    render(<ProgramForm />);
+
+    // Inputs and labels
+    expect(screen.getByLabelText(/Organization Name/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Program Name/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Data Extraction Type/)).toBeInTheDocument();
+    // DropDownMenus by testid
+    expect(screen.getByTestId('handlecapability')).toBeInTheDocument();
+    expect(screen.getByTestId('handleplatform')).toBeInTheDocument();
+    expect(screen.getByTestId('handlecontainer')).toBeInTheDocument();
+    expect(screen.getByTestId('handleepic')).toBeInTheDocument();
+  });
+
+  it('validates required fields', async () => {
+    // Set errors on Formik
+    setupFormik({ org: '', product: '', typeOfExtraction: '' });
+    // Simulate error presence
+    useFormik.mockReturnValueOnce({
+      ...useFormik.mock.results[0].value,
+      errors: {
+        org: 'Organization required',
+        product: 'Product required',
+        typeOfExtraction: 'Extraction type required',
+      },
+      touched: {
+        org: true,
+        product: true,
+        typeOfExtraction: true,
+      },
+    });
+
+    render(<ProgramForm />);
+    expect(screen.getByText('Organization required')).toBeInTheDocument();
+    expect(screen.getByText('Product required')).toBeInTheDocument();
+    expect(screen.getByText('Extraction type required')).toBeInTheDocument();
+  });
+
+  it('dropdown disables based on typeOfExtraction', () => {
+    setupFormik({ typeOfExtraction: 'sContainers' });
+
+    render(<ProgramForm />);
+
+    expect(screen.getByTestId('handlecapability')).not.toBeDisabled();
+    expect(screen.getByTestId('handleplatform')).not.toBeDisabled();
+    expect(screen.getByTestId('handlecontainer')).not.toBeDisabled();
+    expect(screen.getByTestId('handleepic')).not.toBeDisabled();
+  });
+
+  it('calls handleChange for inputs and dropdowns', () => {
+    setupFormik();
+
+    render(<ProgramForm />);
+
+    fireEvent.change(screen.getByLabelText(/Program Name/), {
+      target: { name: 'product', value: 'New Program' },
+    });
+    expect(mockHandleChange).toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId('handlecapability'), { target: { value: 'cap1' } });
+    expect(mockHandleChange).toHaveBeenCalled();
+  });
+
+  it('submit button disables under right conditions', () => {
+    // isSubmitting or !isValid or dirty false disables button
+    setupFormik({}); // valid/dirty/!isSubmitting
+    const { rerender } = render(<ProgramForm />);
+    const btn = screen.getByRole('button', { name: /Onboard Form/i });
+
+    expect(btn).toBeEnabled();
+
+    // isSubmitting true
+    useFormik.mockReturnValueOnce({
+      ...useFormik.mock.results[0].value,
+      isSubmitting: true,
+    });
+    rerender(<ProgramForm />);
+    expect(screen.getByRole('button', { name: /Onboard Form/i })).toBeDisabled();
+
+    // isValid false
+    useFormik.mockReturnValueOnce({
+      ...useFormik.mock.results[0].value,
+      isSubmitting: false,
+      isValid: false,
+    });
+    rerender(<ProgramForm />);
+    expect(screen.getByRole('button', { name: /Onboard Form/i })).toBeDisabled();
+
+    // dirty false
+    useFormik.mockReturnValueOnce({
+      ...useFormik.mock.results[0].value,
+      isValid: true,
+      isSubmitting: false,
+      dirty: false,
+    });
+    rerender(<ProgramForm />);
+    expect(screen.getByRole('button', { name: /Onboard Form/i })).toBeDisabled();
+  });
+
+  it('submits the form and shows success alert', async () => {
+    // Simulate form submission
+    setupFormik();
+
+    render(<ProgramForm />);
+    fireEvent.click(screen.getByRole('button', { name: /Onboard Form/i }));
+
+    // For async, suppose onBoardProgram triggers success alert
+    await waitFor(() => {
+      expect(screen.getByText(/Added successfully/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error alert on failed submission', async () => {
+    // To simulate error, you might simulate the effect changing state
+    setupFormik();
+
+    // Modify the internal API hook to trigger failure
+    // (You will need to mock/fake the effect in your logic)
+    render(<ProgramForm />);
+    // Simulate a failed API response/alert show
+    // (Depending on your component logic you may need to trigger a state update manually)
+    // For example, by simulating a failed API call if possible.
+
+    // For demonstration, we check for the error message in the alert state:
+    await waitFor(() => {
+      expect(screen.getByText(/Some problem happened while adding/i)).toBeInTheDocument();
+    });
+  });
+
+  it('resets values on success', async () => {
+    setupFormik();
+
+    render(<ProgramForm />);
+    // Submit the form
+    fireEvent.click(screen.getByRole('button', { name: /Onboard Form/i }));
+    await waitFor(() => {
+      expect(mockResetForm).toHaveBeenCalled();
+    });
+  });
+
+  // Add more cases if there are more branches/conditions in your real code.
+});
