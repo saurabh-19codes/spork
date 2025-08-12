@@ -12,6 +12,8 @@ jest.mock('../constants', () => ({
   buildUrl: jest.fn((path) => `/mock-base${path}`),
 }));
 
+
+
 const mockRouter = { push: jest.fn() };
 const mockOrgName = 'TestOrg';
 const mockDataByEpics = {
@@ -32,7 +34,41 @@ describe('AcdAptEpicCharts', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
+it('calls loadProgram on click and navigates to the correct URL', () => {
+  const data = {
+    'SayDoRatio: 0% - E19302 - A014 Regulatory and Compliance - Repeatable Processes 2024': {
+      finalized: 1,
+      'Uncommitted Undelivered': 0,
+      sayDoRatio: 0,
+      'Uncommitted Delivered': 0,
+      PI: 'PI 25.1',
+      'Committed Undelivered': 0,
+      beingGroomed: 1,
+      beingWorked: 1,
+      featureCount: 1,
+      'Committed Delivered': 0
+    }
+  };
 
+  render(
+    <AcdAptEpicCharts
+      router={mockRouter}
+      dataByEpics={data}
+      epics={{
+        epic: [{ params: { epic: 'E19302', org: 'ABC', feature: true } }]
+      }}
+      orgName={['FCT']}
+    />
+  );
+
+  // Find and click "Being Groomed" bar label
+  fireEvent.click(screen.getByText(/being groomed/i));
+
+  expect(mockRouter.push).toHaveBeenCalledTimes(1);
+  expect(mockRouter.push).toHaveBeenCalledWith(
+    expect.stringContaining('/program-dashboard/FCT/')
+  );
+});
   it('renders chart with correct labels', () => {
     render(<AcdAptEpicCharts router={mockRouter} dataByEpics={mockDataByEpics} orgName={mockOrgName} />);
 
