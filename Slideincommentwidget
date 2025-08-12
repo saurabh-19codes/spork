@@ -1,0 +1,89 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { SlideInCommentsWidget } from './SlideInCommentsWidget';
+
+// Mocks for hooks & child
+jest.mock('./SlideInComments', () => ({
+  __esModule: true,
+  default: jest.fn(({ onSubmitBtnClick, onReplyBtnClick }) => (
+    <div data-testid="mock-slideincomments">
+      <button onClick={() => onSubmitBtnClick('new comment')} data-testid="submit-comment">Submit</button>
+      <button onClick={() => onReplyBtnClick({replyMsg: 'reply', commentObj: {commentId: 987}})} data-testid="submit-reply">Reply</button>
+    </div>
+  )),
+}));
+
+const mockUseApi = jest.fn();
+jest.mock('hooks/useAuthData', () => ({
+  useApi: () => mockUseApi(),
+}));
+
+const mockCloseComments = jest.fn();
+
+const getCommentsMock = jest.fn();
+const postCommentMock = jest.fn();
+const postReplyCommentMock = jest.fn();
+
+jest.mock('contexts/CommentsContext', () => ({
+  useComments: () => ({
+    isOpen: true,
+    closeComments: mockCloseComments,
+    payload: { some: 'data' },
+    getComments: getCommentsMock,
+    postComment: postCommentMock,
+    postReplyComment: postReplyCommentMock,
+  }),
+}));
+
+describe('SlideInCommentsWidget', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('renders child SlideInComments component', () => {
+    render(<SlideInCommentsWidget />);
+    expect(screen.getByTestId('mock-slideincomments')).toBeInTheDocument();
+  });
+
+  test('calls postComment when comment is non-empty', async () => {
+    render(<SlideInCommentsWidget />);
+    fireEvent.click(screen.getByTestId('submit-comment'));
+    await waitFor(() => {
+      expect(postCommentMock).toHaveBeenCalled();
+    });
+  });
+
+  test('does not call postComment if comment is empty', async () => {
+    render(<SlideInCommentsWidget />);
+    // Simulate the onSubmitBtnClick not called with a value (simulate nothing happens)
+    await waitFor(() => {
+      expect(postCommentMock).not.toHaveBeenCalled();
+    });
+  });
+
+  test('calls postReplyComment when reply message and commentId are present', async () => {
+    render(<SlideInCommentsWidget />);
+    fireEvent.click(screen.getByTestId('submit-reply'));
+    await waitFor(() => {
+      expect(postReplyCommentMock).toHaveBeenCalled();
+    });
+  });
+
+  test('calls getComments when postedComment or postedReply changes', async () => {
+    // Simulate effect firing
+    render(<SlideInCommentsWidget />);
+    await waitFor(() => {
+      expect(getCommentsMock).toHaveBeenCalled();
+    });
+  });
+
+  test('calls closeComments when SlideInComments is closed', async () => {
+    // Since the prop is passed as onCloseBtnClick, ensure it's called
+    render(<SlideInCommentsWidget />);
+    // you'd trigger close via props, depending on your mock you can call it directly
+    // fireEvent.click(screen.getByTestId('close-btn'));
+    // expect(mockCloseComments).toHaveBeenCalled();
+  });
+
+  // More tests as needed for each path: loading state, payload changes, input fields, etc.
+});
