@@ -1,8 +1,9 @@
 import React from 'react';
+import { mount } from 'enzyme';
 import { fromJS } from 'immutable';
-import { render, fireEvent, waitFor, screen } from '@testing-library/react';
 import { useFetchye } from 'fetchye';
 import { useSelector } from 'react-redux';
+import { render, waitFor, fireEvent, screen } from '@testing-library/react';
 import ProgramForm from '../../../src/components/OnBoardProgram/ProgramForm';
 
 jest.mock('fetchye', () => ({
@@ -33,26 +34,46 @@ beforeEach(() => {
   }));
 });
 
-describe('ProgramForm', () => {
+describe('View UI', () => {
+  it('should render the view page', async () => {
+    useFetchye.mockImplementationOnce(() => ({
+      isLoading: false,
+      data: { success: true },
+      run: async () => ({ success: true }),
+    }));
+    const component = mount(<ProgramForm />);
+    expect(component).toMatchSnapshot();
+  });
+
+  it('should render the view page with null', async () => {
+    useFetchye.mockImplementationOnce(() => ({
+      isLoading: false,
+      data: { success: true },
+      run: async () => ({ success: true }),
+    }));
+    const { getByTestId } = render(<ProgramForm />);
+    const saveNode = await waitFor(() => getByTestId('onsubmit'));
+    fireEvent.submit(saveNode);
+    const listNode = await waitFor(() => getByTestId('handleorg'));
+    fireEvent.change(listNode, { target: { value: 'OrgTest' } });
+    const listNode2 = await waitFor(() => getByTestId('handleproduct'));
+    fireEvent.change(listNode2, { target: { value: 'ProductTest' } });
+    expect(getByTestId('handleproduct')).toBeInTheDocument();
+  });
+
+  // ✅ Extra tests for full coverage
+
   it('should submit successfully and show success alert', async () => {
     mockRun.mockResolvedValueOnce({ success: true });
     render(<ProgramForm orgName="Test Org" />);
-
     fireEvent.change(screen.getByTestId('handleproduct'), {
       target: { value: 'Test Product' },
     });
-    fireEvent.change(screen.getByTestId('handleextraction'), {
-      target: { value: 'epics' },
-    });
-
     fireEvent.submit(screen.getByTestId('onsubmit'));
-
     await waitFor(() => {
       expect(mockRun).toHaveBeenCalled();
       expect(screen.getByText(/Added successfully/i)).toBeInTheDocument();
     });
-
-    // Close alert
     fireEvent.click(screen.getByTestId('showAlert'));
     expect(screen.queryByText(/Added successfully/i)).not.toBeInTheDocument();
   });
@@ -60,9 +81,7 @@ describe('ProgramForm', () => {
   it('should show error alert on failed submit', async () => {
     mockRun.mockResolvedValueOnce({ success: false });
     render(<ProgramForm orgName="Test Org" />);
-
     fireEvent.submit(screen.getByTestId('onsubmit'));
-
     await waitFor(() => {
       expect(screen.getByText(/Some problem happened/i)).toBeInTheDocument();
     });
@@ -70,7 +89,6 @@ describe('ProgramForm', () => {
 
   it('should change all dropdowns and inputs', () => {
     render(<ProgramForm orgName="Test Org" />);
-
     fireEvent.change(screen.getByTestId('handleorg'), {
       target: { value: 'New Org' },
     });
@@ -78,7 +96,7 @@ describe('ProgramForm', () => {
       target: { value: 'New Product' },
     });
     fireEvent.change(screen.getByTestId('handleextraction'), {
-      target: { value: 'Containers' },
+      target: { value: 'epics' },
     });
     fireEvent.change(screen.getByTestId('handleepic'), {
       target: { value: 'Epic 1' },
@@ -96,11 +114,9 @@ describe('ProgramForm', () => {
 
   it('should disable dropdowns when typeOfExtraction is Containers', () => {
     render(<ProgramForm orgName="Test Org" />);
-
     fireEvent.change(screen.getByTestId('handleextraction'), {
       target: { value: 'Containers' },
     });
-
     expect(screen.getByTestId('handleepic')).toBeDisabled();
     expect(screen.getByTestId('handlecapability')).toBeDisabled();
     expect(screen.getByTestId('handleplatform')).toBeDisabled();
@@ -108,7 +124,6 @@ describe('ProgramForm', () => {
 
   it('should disable submit button when form is pristine', () => {
     render(<ProgramForm orgName="Test Org" />);
-    const btn = screen.getByTestId('onsubmit');
-    expect(btn).toBeDisabled();
+    expect(screen.getByTestId('onsubmit')).toBeDisabled();
   });
 });
