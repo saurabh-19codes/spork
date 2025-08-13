@@ -1,0 +1,73 @@
+// StaticData.spec.js
+
+import { transformData2 } from './StaticData';
+
+describe('transformData2', () => {
+
+  it('should handle empty input array', () => {
+    const result = transformData2([]);
+    expect(result).toEqual({
+      actual: [],
+      planned: [],
+    });
+  });
+
+  it('should create parent records for unique features', () => {
+    const input = [
+      { feature: 'Feature1', state: 'State1', epic: 'Epic1', orgName: 'Org1', projectName: 'Proj1', plannedStartDate: '2023-01-01', plannedEndDate: '2023-02-01', actualStartDate: '2023-01-01', actualEndDate: '2023-02-01' }
+    ];
+    const result = transformData2(input);
+    expect(result.planned.some(r => r.isParent)).toBe(true);
+    expect(result.actual.some(r => r.isParent)).toBe(true);
+  });
+
+  it('should generate correct child planned and actual records', () => {
+    const input = [
+      { feature: 'Feature2', state: 'State2', epic: 'Epic2', orgName: 'Org2', projectName: 'Proj2', plannedStartDate: '2023-03-01', plannedEndDate: '2023-04-01', actualStartDate: '2023-03-01', actualEndDate: '2023-04-01' }
+    ];
+    const result = transformData2(input);
+    expect(result.planned).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'STATE2', orgName: 'Org2', parent: expect.any(String), color: expect.any(String) })
+      ])
+    );
+    expect(result.actual).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'STATE2', orgName: 'Org2', parent: expect.any(String), color: expect.any(String) })
+      ])
+    );
+  });
+
+  it('should handle delayed states correctly', () => {
+    const input = [
+      {
+        feature: 'Feature3',
+        state: 'State3',
+        epic: 'EpicX',
+        orgName: 'Org3',
+        projectName: 'Proj3',
+        plannedStartDate: '2023-01-01',
+        plannedEndDate: '2023-01-05',
+        actualStartDate: '2023-01-01',
+        actualEndDate: '2023-01-10' // Actual ends after planned
+      }
+    ];
+    const result = transformData2(input);
+    // Should have a DELAY record for this state
+    const delayed = result.actual.find(r => r.name.includes('DELAYED'));
+    expect(delayed).toBeDefined();
+    expect(delayed.start).toBeGreaterThan(Date.parse('2023-01-05'));
+  });
+
+  it('should assign correct IDs and maintain relationships', () => {
+    const input = [
+      { feature: 'F1', state: 'St1', epic: 'E1', orgName: 'O1', projectName: 'P1', plannedStartDate: '2023-01-01', plannedEndDate: '2023-01-02', actualStartDate: '2023-01-01', actualEndDate: '2023-01-02' }
+    ];
+    const result = transformData2(input);
+    const plannedChild = result.planned.find(r => r.id.includes('st1'));
+    expect(plannedChild.parent).toBeDefined();
+    const actualChild = result.actual.find(r => r.id.includes('st1'));
+    expect(actualChild.parent).toBeDefined();
+  });
+
+});
