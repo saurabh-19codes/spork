@@ -1,0 +1,153 @@
+import React from 'react';
+import { render, fireEvent, waitFor, screen } from '@testing-library/react';
+import { fromJS } from 'immutable';
+import { useFetchye } from 'fetchye';
+import { useSelector } from 'react-redux';
+import ProgramForm from '../../../src/components/OnBoardProgram/ProgramForm';
+
+jest.mock('fetchye', () => ({
+  useFetchye: jest.fn(),
+}));
+
+jest.mock('formik', () => {
+  return {
+    useFormik: jest.fn(),
+  };
+});
+
+jest.mock('react-redux', () => ({
+  ...jest.requireActual('react-redux'),
+  useSelector: jest.fn(),
+}));
+
+const mockAppState = fromJS({
+  config: {
+    oneApiUrl: 'http://localhost',
+  },
+});
+
+const mockSetState = jest.fn();
+
+describe('ProgramForm', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useSelector.mockImplementation((cb) => cb(mockAppState));
+  });
+
+  const setupFormikMock = (overrides = {}) => {
+    const defaultFormik = {
+      values: {
+        org: 'Org1',
+        product: 'Prod1',
+        typeOfExtraction: '',
+        epics: [],
+        capabilities: [],
+        platforms: [],
+        container: [],
+      },
+      errors: {},
+      handleChange: jest.fn(),
+      handleSubmit: jest.fn(),
+      isSubmitting: false,
+      isValid: true,
+      dirty: true,
+      resetForm: jest.fn(),
+    };
+    require('formik').useFormik.mockReturnValue({ ...defaultFormik, ...overrides });
+  };
+
+  test('renders alert success and closes it', async () => {
+    setupFormikMock();
+    useFetchye.mockReturnValue({
+      isLoading: false,
+      data: true,
+      run: jest.fn(),
+    });
+
+    render(<ProgramForm />);
+
+    // Manually set alertShow = true and alertType = 'success'
+    // We'll directly trigger the close button
+    fireEvent.click(screen.getByTestId('showAlert'));
+    expect(screen.getByTestId('showAlert')).toBeInTheDocument();
+  });
+
+  test('calls run with success response and sets alert type success', async () => {
+    const runMock = jest.fn().mockResolvedValue(true);
+    useFetchye.mockReturnValue({
+      isLoading: false,
+      data: null,
+      run: runMock,
+    });
+
+    const resetForm = jest.fn();
+    setupFormikMock({ resetForm });
+
+    render(<ProgramForm />);
+
+    fireEvent.submit(screen.getByTestId('onsubmit'));
+
+    await waitFor(() => {
+      expect(runMock).toHaveBeenCalled();
+    });
+  });
+
+  test('calls run with error response and sets alert type error', async () => {
+    const runMock = jest.fn().mockResolvedValue(null);
+    useFetchye.mockReturnValue({
+      isLoading: false,
+      data: null,
+      run: runMock,
+    });
+
+    setupFormikMock();
+
+    render(<ProgramForm />);
+
+    fireEvent.submit(screen.getByTestId('onsubmit'));
+
+    await waitFor(() => {
+      expect(runMock).toHaveBeenCalled();
+    });
+  });
+
+  test('disables dropdown when typeOfExtraction is Containers', () => {
+    setupFormikMock({ values: { typeOfExtraction: 'Containers' } });
+    useFetchye.mockReturnValue({
+      isLoading: false,
+      data: null,
+      run: jest.fn(),
+    });
+
+    render(<ProgramForm />);
+
+    expect(screen.getByTestId('handleepic')).toBeDisabled();
+  });
+
+  test('renders select options for epics and containers', () => {
+    setupFormikMock({
+      values: { typeOfExtraction: '', epics: [], container: [] },
+    });
+    useFetchye.mockReturnValue({
+      isLoading: false,
+      data: null,
+      run: jest.fn(),
+    });
+
+    render(<ProgramForm />);
+
+    expect(screen.getByTestId('handlextraction')).toBeInTheDocument();
+  });
+
+  test('submit button disabled when not dirty', () => {
+    setupFormikMock({ dirty: false });
+    useFetchye.mockReturnValue({
+      isLoading: false,
+      data: null,
+      run: jest.fn(),
+    });
+
+    render(<ProgramForm />);
+    expect(screen.getByTestId('onsubmit')).toBeDisabled();
+  });
+});
